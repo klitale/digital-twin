@@ -20,9 +20,9 @@ anonymize:
   token_urls: true               # URLs carrying tokens, keys or invite codes -> <url>
   mentions: true                 # @username -> @user
 filters:
-  min_date: null                 # ISO date (YYYY-MM-DD, UTC); earlier pairs are dropped and counted
+  min_date: 2021-01-01           # ISO date (UTC); earlier pairs are dropped and counted (style drift, see profile report)
 split:
-  tail_fraction: 0.05            # last share of each chat's pairs (by time) becomes the holdout tail
+  tail_fraction: 0.15            # last share of each chat's pairs (by time) -> holdout tail (~1100 pairs with min_date 2021)
   min_pairs_per_chat: 20         # shorter chats contribute no holdout (noted in the manifest)
   eval_sample_size: 80           # pairs sampled from the tail for evaluation
   stratify_by: month

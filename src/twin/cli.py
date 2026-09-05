@@ -116,9 +116,68 @@ def style_profile(
     force: Annotated[
         bool, typer.Option("--force", help="Overwrite an existing, possibly hand-edited profile.")
     ] = False,
+    sample_size: Annotated[int, typer.Option("--sample-size", min=1)] = 300,
+    seed: Annotated[int, typer.Option("--seed")] = 20260905,
+    prompt: Annotated[str, typer.Option("--prompt", help="Template name under prompts/.")] = (
+        "style_profile_v1"
+    ),
 ) -> None:
-    """Derive the style profile (Russian rules) from sampled replies."""
-    _not_yet("style-profile", 3)
+    """Derive the style profile (20-30 Russian rules) from sampled training replies."""
+    from twin.config import ConfigError, load_settings
+    from twin.core.llm_client import LLMClient, LLMError
+    from twin.core.prompts import PromptError, load_prompt
+    from twin.ingest.pipeline import STYLE_PROFILE_FILE, load_processed
+    from twin.ingest.style_profile import (
+        RULES_MAX,
+        RULES_MIN,
+        StyleProfileExistsError,
+        generate_style_profile,
+        write_style_profile,
+    )
+
+    settings = load_settings()
+    target = settings.processed_dir / STYLE_PROFILE_FILE
+    try:
+        if target.exists() and not force:
+            raise StyleProfileExistsError(
+                f"{target} exists (possibly hand-edited); rerun with --force to overwrite"
+            )
+        settings.require_llm()
+        if not settings.twin_name.strip():
+            raise ConfigError("TWIN_NAME is not set: the profile needs the persona's name")
+        train, _holdout, manifest = load_processed(settings)
+        template = load_prompt(prompt)
+        client = LLMClient(
+            base_url=settings.llm_base_url,
+            api_key=settings.llm_api_key,  # type: ignore[arg-type]
+            model=settings.style_profile_model,
+        )
+        result = generate_style_profile(
+            client, template, settings.twin_name, train, sample_size=sample_size, seed=seed
+        )
+        write_style_profile(target, result, manifest.dataset_version, force=force)
+    except (
+        ConfigError,
+        PromptError,
+        LLMError,
+        StyleProfileExistsError,
+        OSError,
+        ValueError,
+    ) as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"style profile: {target}")
+    typer.echo(
+        f"model {result.model}, prompt {result.prompt_version}, sample {result.sample_size} "
+        f"replies, {result.rules} rules, tokens {result.prompt_tokens}+{result.completion_tokens}, "
+        f"{result.latency_ms} ms"
+    )
+    if not RULES_MIN <= result.rules <= RULES_MAX:
+        typer.echo(
+            f"warning: expected {RULES_MIN}-{RULES_MAX} rules, got {result.rules}; "
+            "review the file or rerun with --force",
+            err=True,
+        )
 
 
 @app.command()

@@ -4,7 +4,7 @@ import pytest
 
 from twin.core.schemas import ContextTurn, Pair
 from twin.ingest.dataconfig import SplitConfig
-from twin.ingest.split import LeakageError, _largest_remainder, assert_no_leakage, split_pairs
+from twin.ingest.split import LeakageError, allocate_proportionally, assert_no_leakage, split_pairs
 
 BASE = 1704067200  # 2024-01-01T00:00:00Z
 DAY = 86400
@@ -24,12 +24,12 @@ def pair(index: int, chat_id: int = 1002, ts: int | None = None) -> Pair:
     )
 
 
-def test_largest_remainder_allocation() -> None:
-    assert _largest_remainder({"a": 50, "b": 30, "c": 20}, 10) == {"a": 5, "b": 3, "c": 2}
-    assert _largest_remainder({"a": 1, "b": 1, "c": 1}, 2) == {"a": 1, "b": 1, "c": 0}
-    assert sum(_largest_remainder({"a": 7, "b": 3, "c": 3}, 8).values()) == 8
-    assert _largest_remainder({"a": 2, "b": 2}, 10) == {"a": 2, "b": 2}  # capped by population
-    assert _largest_remainder({}, 5) == {}
+def testallocate_proportionally_allocation() -> None:
+    assert allocate_proportionally({"a": 50, "b": 30, "c": 20}, 10) == {"a": 5, "b": 3, "c": 2}
+    assert allocate_proportionally({"a": 1, "b": 1, "c": 1}, 2) == {"a": 1, "b": 1, "c": 0}
+    assert sum(allocate_proportionally({"a": 7, "b": 3, "c": 3}, 8).values()) == 8
+    assert allocate_proportionally({"a": 2, "b": 2}, 10) == {"a": 2, "b": 2}  # capped by population
+    assert allocate_proportionally({}, 5) == {}
 
 
 def test_tail_split_by_time_and_eval_sample() -> None:

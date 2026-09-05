@@ -1,5 +1,5 @@
 {
-  "dataset_version": "971a2c2c6448",
+  "dataset_version": "18c006a31cb7",
   "messages_dataset_version": "999f2f3a9ff0",
   "config": {
     "version": 1,
@@ -26,10 +26,10 @@
       "mentions": true
     },
     "filters": {
-      "min_date": null
+      "min_date": "2021-01-01"
     },
     "split": {
-      "tail_fraction": 0.05,
+      "tail_fraction": 0.15,
       "min_pairs_per_chat": 20,
       "eval_sample_size": 80,
       "stratify_by": "month",
@@ -41,15 +41,15 @@
   "turns": 50257,
   "twin_turns": 24533,
   "conversations": 2447,
-  "pairs_kept": 22040,
+  "pairs_kept": 7330,
   "pairs_dropped": {
-    "no_partner_context": 920,
-    "reply_too_short": 752,
-    "no_context": 662,
-    "reply_forwarded_only": 93,
-    "reply_bare_link": 46,
-    "reply_no_words": 17,
-    "reply_too_long": 3
+    "before_min_date": 16766,
+    "no_context": 168,
+    "reply_too_short": 103,
+    "no_partner_context": 100,
+    "reply_forwarded_only": 40,
+    "reply_bare_link": 24,
+    "reply_no_words": 2
   },
   "anonymized": {
     "mention": 56,
@@ -58,8 +58,8 @@
     "card": 11,
     "phone": 10
   },
-  "train": 20938,
-  "holdout_tail": 1102,
+  "train": 6230,
+  "holdout_tail": 1100,
   "eval_sample": 80,
   "eval_sample_by_period": {
     "2026-05": 10,
@@ -71,30 +71,14 @@
   "chats": [
     {
       "chat_index": 1,
-      "pairs": 22040,
-      "train": 20938,
-      "holdout": 1102,
+      "pairs": 7330,
+      "train": 6230,
+      "holdout": 1100,
       "cutoff_date": "2026-05-14",
       "too_short_for_holdout": false
     }
   ],
   "per_year": {
-    "2017": {
-      "train": 283,
-      "holdout": 0
-    },
-    "2018": {
-      "train": 8227,
-      "holdout": 0
-    },
-    "2019": {
-      "train": 3549,
-      "holdout": 0
-    },
-    "2020": {
-      "train": 2651,
-      "holdout": 0
-    },
     "2021": {
       "train": 958,
       "holdout": 0
@@ -116,14 +100,14 @@
       "holdout": 0
     },
     "2026": {
-      "train": 490,
-      "holdout": 1102
+      "train": 492,
+      "holdout": 1100
     }
   },
   "reply_chars": {
-    "p50": 24,
-    "p90": 74,
-    "p99": 188,
+    "p50": 29,
+    "p90": 90,
+    "p99": 245,
     "max": 1137,
     "over_max": 0
   },

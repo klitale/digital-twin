@@ -32,7 +32,7 @@ class SplitResult:
     eval_by_period: Counter[str] = field(default_factory=Counter)
 
 
-def _largest_remainder(sizes: dict[str, int], total: int) -> dict[str, int]:
+def allocate_proportionally(sizes: dict[str, int], total: int) -> dict[str, int]:
     """Allocate ``total`` draws across strata proportionally to their sizes."""
     population = sum(sizes.values())
     if population == 0 or total <= 0:
@@ -57,7 +57,7 @@ def choose_eval_sample(holdout: Sequence[Pair], config: SplitConfig) -> set[str]
     for pair in holdout:
         key = f"{pair.chat_id}:{period_of(pair.ts, config.stratify_by)}"
         strata.setdefault(key, []).append(pair.pair_id)
-    allocation = _largest_remainder(
+    allocation = allocate_proportionally(
         {key: len(ids) for key, ids in strata.items()}, config.eval_sample_size
     )
     rng = random.Random(config.seed)

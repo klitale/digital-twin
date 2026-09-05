@@ -5,13 +5,25 @@ from pathlib import Path
 import pytest
 
 from twin.config import ConfigError
-from twin.ingest.dataconfig import DEFAULT_DATA_CONFIG, DataConfig, load_data_config
+from twin.ingest.dataconfig import (
+    DEFAULT_DATA_CONFIG,
+    DataConfig,
+    FiltersConfig,
+    SplitConfig,
+    load_data_config,
+)
 
 REPO_DEFAULT = Path(__file__).parent.parent / "configs" / "data" / "default.yaml"
 
 
-def test_repo_default_file_mirrors_built_in_defaults() -> None:
-    assert load_data_config(REPO_DEFAULT) == DataConfig()
+def test_repo_default_file_mirrors_built_in_defaults_except_the_date_filter() -> None:
+    loaded = load_data_config(REPO_DEFAULT)
+    assert loaded.filters.min_date is not None  # project decision: drop the old-style years
+    assert loaded.split.tail_fraction > DataConfig().split.tail_fraction  # keeps ~1100 tail pairs
+    neutral = loaded.model_copy(
+        update={"filters": FiltersConfig(), "split": SplitConfig(seed=loaded.split.seed)}
+    )
+    assert neutral == DataConfig()
 
 
 def test_missing_default_path_falls_back_to_built_in_defaults() -> None:

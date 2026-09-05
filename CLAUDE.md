@@ -41,12 +41,15 @@ no userbot, no local model serving.
 
 ```
 src/twin/  config.py (Settings, require_*), cli.py, logsetup.py
-           core/schemas.py (Message, manifests, DropReason)
+           core/schemas.py (contracts), llm_client.py (one OpenAI-compatible client,
+           reasoning off per model family), prompts.py (versioned prompts/*.md templates)
            ingest/parse_export.py (parser), reconstruct.py (turns, pairs), anonymize.py,
            split.py (time tail + seeded eval sample, leakage asserts), profile_dataset.py,
-           dataconfig.py (configs/data/*.yaml), pipeline.py (twin ingest), stats.py (5.4)
+           dataconfig.py (configs/data/*.yaml), pipeline.py (twin ingest), stats.py (5.4),
+           style_profile.py (twin style-profile: 300 train replies + stats -> Russian rules)
            bot/ eval/                          # added phase by phase
-scripts/privacy_check.py   tests/ (synthetic fixtures only)   prompts/ configs/
+scripts/privacy_check.py   tests/ (synthetic fixtures, fake_openai_server.py)
+prompts/<name>_v<N>.md   configs/data/default.yaml (min_date 2021, 15% tail)
 training/ serving/ deploy/ docs/   data/ (gitignored except README and manifest)
 ```
 

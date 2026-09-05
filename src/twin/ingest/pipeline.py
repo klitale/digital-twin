@@ -42,6 +42,7 @@ PAIRS_FILE = "pairs.jsonl"
 HOLDOUT_FILE = "holdout.jsonl"
 DATASET_MANIFEST = "dataset_manifest.json"
 PROFILE_REPORT = "profile_report.md"
+STYLE_PROFILE_FILE = "style_profile.md"
 
 
 class SenderNotConfiguredError(ConfigError):
