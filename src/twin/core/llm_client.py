@@ -36,12 +36,17 @@ class LLMResult:
     completion_tokens: int | None
     latency_ms: int
     finish_reason: str | None
+    reasoning_tokens: int | None = None
 
 
 def reasoning_off_params(model: str) -> dict[str, Any]:
     """Request parameters that disable thinking for the given model id.
 
-    Verified against the gateway in Phase 4; unknown families get no extra parameters.
+    Verified against the Timeweb gateway (Phase 4): ``enable_thinking=false`` switches
+    Qwen 3.5 off; GPT-5.4 mini does not reason by default and accepts
+    ``reasoning_effort``; DeepSeek V4 Flash keeps reasoning (10-40 tokens on short
+    prompts) whatever is sent, so the gateway ignores its switch - the client logs
+    ``reasoning_tokens`` so this stays visible.
     """
     lowered = model.lower()
     if lowered.startswith("deepseek/"):
@@ -108,6 +113,8 @@ class LLMClient:
         choice = response.choices[0] if response.choices else None
         text = (choice.message.content or "") if choice and choice.message else ""
         usage = response.usage
+        details = getattr(usage, "completion_tokens_details", None) if usage else None
+        reasoning_tokens = getattr(details, "reasoning_tokens", None) if details else None
         result = LLMResult(
             text=text,
             model=response.model or model,
@@ -115,12 +122,14 @@ class LLMClient:
             completion_tokens=usage.completion_tokens if usage else None,
             latency_ms=latency_ms,
             finish_reason=choice.finish_reason if choice else None,
+            reasoning_tokens=reasoning_tokens,
         )
         log.info(
             "llm.chat",
             model=result.model,
             prompt_tokens=result.prompt_tokens,
             completion_tokens=result.completion_tokens,
+            reasoning_tokens=reasoning_tokens,
             latency_ms=latency_ms,
             finish_reason=result.finish_reason,
             temperature=temperature,

@@ -131,3 +131,23 @@ class FakeOpenAIServer:
     def __exit__(self, *_exc: object) -> None:
         self._server.shutdown()
         self._server.server_close()
+
+
+class HashEmbeddings:
+    """Offline EmbeddingProvider for tests: deterministic hash vectors."""
+
+    def __init__(self, dim: int = 8, provider: str = "fake", model: str = "hash") -> None:
+        self.dim = dim
+        self.provider = provider
+        self.model = model
+        self.calls: list[tuple[str, int]] = []
+
+    @property
+    def identity(self) -> Any:
+        from twin.core.embeddings import EmbeddingIdentity
+
+        return EmbeddingIdentity(self.provider, self.model, self.dim)
+
+    def embed(self, texts: list[str], kind: str) -> list[list[float]]:
+        self.calls.append((kind, len(texts)))
+        return [fake_embedding(t, self.dim) for t in texts]

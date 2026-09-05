@@ -25,8 +25,8 @@ Educational portfolio project; the repository is public and must contain no pers
 | 1 | Export parsing → `messages.jsonl` | done |
 | 2 | Pairs, time-based split, profiling report | done |
 | 3 | Style profile | done |
-| 4 | Index, retrieval, prompt, RAG backend, `twin chat` | next |
-| 5 | Business bot + VPS inventory/deploy | |
+| 4 | Index, retrieval, prompt, RAG backend, `twin chat` | done |
+| 5 | Business bot + VPS inventory/deploy | next |
 | 6 | Fine-tuning pipeline + Modal serving + backends | |
 | 7 | Eval harness, judge, compare, HTML report | |
 | 8 | Project skills, README | |
@@ -42,7 +42,10 @@ no userbot, no local model serving.
 ```
 src/twin/  config.py (Settings, require_*), cli.py, logsetup.py
            core/schemas.py (contracts), llm_client.py (one OpenAI-compatible client,
-           reasoning off per model family), prompts.py (versioned prompts/*.md templates)
+           reasoning off per model family), prompts.py (versioned prompts/*.md templates),
+           embeddings.py, vector_store.py (Chroma + index manifest), retriever.py (filters,
+           dedupe), prompt.py, backends.py (GenerationBackend, RagBackend, validate-once),
+           validate.py, memory.py, factory.py (build_backend from settings)
            ingest/parse_export.py (parser), reconstruct.py (turns, pairs), anonymize.py,
            split.py (time tail + seeded eval sample, leakage asserts), profile_dataset.py,
            dataconfig.py (configs/data/*.yaml), pipeline.py (twin ingest), stats.py (5.4),
@@ -67,8 +70,13 @@ training/ serving/ deploy/ docs/   data/ (gitignored except README and manifest)
 - Every generated reply is one structlog record: timestamp, chat_id, message_id, mode,
   model, prompt_version, retrieved_example_ids, params, latency, response, dry_run.
   Never log tokens, keys or full business-connection payloads (`logsetup` redacts).
-- Tests need no real credentials or paid APIs; `@pytest.mark.manual` for the rest.
-- Tests run in an empty cwd (`conftest.py`), so `.env` is never read by accident.
+- Tests need no real credentials or paid APIs (`tests/fake_openai_server.py`, temporary
+  Chroma); they run in an empty cwd (`conftest.py`), so `.env` is never read by accident.
+- Gateway facts (Phase 4): embeddings batches over ~10 texts return 503
+  (`EMBED_BATCH_SIZE=10`, parallel workers); Qwen 3.5 Flash honours
+  `enable_thinking=false` (default generator), DeepSeek V4 Flash keeps reasoning on,
+  GPT-5.4 mini does not reason. Index = train pairs only (last two partner turns);
+  `index_manifest.json` pins provider/model/dimension/dataset, mismatch fails loudly.
 
 ## Telegram identities (three different accounts in this deployment)
 

@@ -182,16 +182,98 @@ def style_profile(
 
 @app.command()
 def index(
-    rebuild: Annotated[bool, typer.Option("--rebuild", help="Drop and rebuild the index.")] = False,
+    rebuild: Annotated[
+        bool, typer.Option("--rebuild", help="Drop the existing index and build it again.")
+    ] = False,
 ) -> None:
-    """Build the retrieval index from the training pairs."""
-    _not_yet("index", 4)
+    """Build the retrieval index from the training pairs (holdout is never indexed)."""
+    from twin.config import ConfigError, load_settings
+    from twin.core.embeddings import EmbeddingError, embeddings_from_settings
+    from twin.core.vector_store import ChromaVectorStore
+    from twin.ingest.index import IndexExistsError, build_index
+    from twin.ingest.pipeline import load_processed
+
+    settings = load_settings()
+    try:
+        train, _holdout, manifest = load_processed(settings)
+        store = ChromaVectorStore(settings.chroma_dir)
+        if rebuild and store.count() > 0:
+            typer.echo(f"dropping {store.count()} indexed records")
+            store.reset()
+        index_manifest = build_index(
+            store,
+            embeddings_from_settings(settings),
+            train,
+            manifest.dataset_version,
+            batch_size=settings.embed_batch_size,
+            progress=True,
+            workers=settings.embed_workers,
+        )
+    except (ConfigError, EmbeddingError, IndexExistsError, OSError, ValueError) as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"index: {settings.chroma_dir} ({index_manifest.count} records)")
+    typer.echo(index_manifest.model_dump_json(indent=2))
 
 
 @app.command()
-def chat() -> None:
-    """Talk to the twin in the terminal."""
-    _not_yet("chat", 4)
+def chat(
+    partner_id: Annotated[
+        int | None, typer.Option("--partner-id", help="Memory slot; default: first allowed user.")
+    ] = None,
+    k: Annotated[int | None, typer.Option("--k", help="Retrieved examples per turn.")] = None,
+) -> None:
+    """Talk to the twin in the terminal (type /reset to clear memory, /quit to leave)."""
+    import sys
+    import time
+
+    from twin.config import ConfigError, load_settings
+    from twin.core.backends import GenerationRequest
+    from twin.core.factory import build_backend, build_memory
+    from twin.core.memory import MemoryTurn
+    from twin.core.prompts import PromptError
+    from twin.core.vector_store import IndexMismatchError
+
+    settings = load_settings()
+    partner = (
+        partner_id
+        if partner_id is not None
+        else (settings.allowed_user_ids[0] if settings.allowed_user_ids else 0)
+    )
+    try:
+        backend = build_backend(settings, k=k)
+    except (ConfigError, PromptError, IndexMismatchError, OSError) as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    memory = build_memory(settings)
+    typer.echo(f"twin chat: mode {backend.mode}, partner {partner}. /reset, /quit", err=True)
+    for line in sys.stdin:
+        text = line.strip()
+        if not text:
+            continue
+        if text in ("/quit", "/exit"):
+            break
+        if text == "/reset":
+            memory.reset(partner)
+            typer.echo("(memory cleared)", err=True)
+            continue
+        history = memory.turns(partner)
+        previous = next((t.text for t in reversed(history) if not t.is_me), None)
+        request = GenerationRequest(
+            partner_id=partner, text=text, previous_partner_text=previous, history=history
+        )
+        result = backend.generate(request)
+        now = int(time.time())
+        memory.append(partner, MemoryTurn(is_me=False, text=text, ts=now))
+        if result.text is None:
+            typer.echo(f"({settings.twin_name} молчит: {', '.join(result.rejected)})")
+        else:
+            typer.echo(f"{settings.twin_name}: {result.text}")
+            memory.append(partner, MemoryTurn(is_me=True, text=result.text, ts=now))
+        typer.echo(
+            f"  [{result.model}, {result.latency_ms} ms, examples {len(result.retrieved_ids)}]",
+            err=True,
+        )
 
 
 @app.command()

@@ -77,7 +77,7 @@ class Settings(BaseSettings):
     # Generation LLM (OpenAI-compatible gateway)
     llm_base_url: str = "https://api.timeweb.ai/v1"
     llm_api_key: SecretStr | None = None
-    llm_model: str = "deepseek/deepseek-v4-flash"
+    llm_model: str = "dashscope/qwen3.5-flash"
 
     # Fine-tuned model endpoint (Modal, OpenAI-compatible)
     ft_base_url: str | None = None
@@ -102,6 +102,13 @@ class Settings(BaseSettings):
     modal_token_secret: SecretStr | None = None
     hf_token: SecretStr | None = None
     hf_repo_id: str | None = None
+
+    # Retrieval and generation
+    embed_batch_size: int = 10  # the gateway rejects larger embedding batches (503)
+    embed_workers: int = 4
+    retrieval_k: int = 8
+    history_turns: int = 10
+    generation_temperature: float = 0.8
 
     # Limits and paths
     max_reply_chars: int = 600
@@ -137,6 +144,14 @@ class Settings(BaseSettings):
     @property
     def state_dir(self) -> Path:
         return self.data_dir / "state"
+
+    @property
+    def chroma_dir(self) -> Path:
+        return self.data_dir / "chroma"
+
+    @property
+    def memory_dir(self) -> Path:
+        return self.state_dir / "memory"
 
     # --- prerequisite checks -------------------------------------------------------
 
