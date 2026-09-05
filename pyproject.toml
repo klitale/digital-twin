@@ -1,0 +1,75 @@
+[project]
+name = "digital-twin"
+version = "0.1.0"
+description = "Telegram Business bot that replies in a personal writing style: RAG, LoRA fine-tune and hybrid modes behind one interface, with a shared evaluation harness."
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+license = { text = "MIT" }
+dependencies = [
+    "aiogram>=3.15",
+    "openai>=1.60",
+    "chromadb>=1.0",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.7",
+    "structlog>=24.4",
+    "typer>=0.15",
+    "pyyaml>=6.0",
+    "tqdm>=4.66",
+    "huggingface-hub>=0.27",
+    "tokenizers>=0.20",
+    "modal>=1.0",
+]
+
+[project.optional-dependencies]
+# Local embeddings (multilingual-e5); only if the host has >= 2 GB free RAM.
+local-embed = ["sentence-transformers>=3.3"]
+# GPU training deps (unsloth, trl, ...) are NOT declared here: they are installed
+# inside the Modal image / Colab from training/requirements-gpu.txt (Phase 6).
+
+[project.scripts]
+twin = "twin.cli:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.8",
+    "pre-commit>=4.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/twin"]
+
+[tool.uv]
+# Laptop is an Intel Mac, servers are x86_64 Linux: make the resolver pick versions
+# with wheels for both (onnxruntime, pulled in by chromadb, dropped macOS x86_64 wheels).
+required-environments = [
+    "sys_platform == 'darwin' and platform_machine == 'x86_64'",
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
+# cbor2 >= 6 (via modal) is Rust-only with no macOS x86_64 wheels; 5.x ships wheels.
+constraint-dependencies = ["cbor2<6"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N", "W", "SIM", "RUF"]
+# Russian text in prompts, fixtures and docstrings triggers the ambiguous-unicode rules.
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["scripts"]
+asyncio_mode = "auto"
+markers = ["manual: needs real credentials or paid APIs; excluded by default"]
+addopts = "-m 'not manual'"

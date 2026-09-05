@@ -1,0 +1,31 @@
+# Runs on every commit. Install once with `uv run pre-commit install`.
+# Privacy guards: gitleaks (secrets) and scripts/privacy_check.py (ids, phones, names).
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+      - id: check-json
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: detect-private-key
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.6
+    hooks:
+      - id: ruff-check
+        args: ["--fix"]
+      - id: ruff-format
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.0
+    hooks:
+      - id: gitleaks
+  - repo: local
+    hooks:
+      - id: privacy-check
+        name: privacy-check (Telegram ids, phones, keys, blocklist)
+        entry: python3 scripts/privacy_check.py
+        language: system
+        pass_filenames: true
+        exclude: ^(\.env(\..*)?|data/private/.*|uv\.lock)$

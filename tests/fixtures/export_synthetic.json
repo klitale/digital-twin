@@ -1,0 +1,362 @@
+{
+ "name": "Злата Куприянова",
+ "type": "personal_chat",
+ "id": 1002,
+ "messages": [
+  {
+   "id": 1,
+   "type": "service",
+   "date": "2024-03-01T07:55:00",
+   "date_unixtime": "1709279700",
+   "actor": "Злата Куприянова",
+   "actor_id": "user1002",
+   "action": "phone_call",
+   "duration_seconds": 42,
+   "discard_reason": "hangup",
+   "text": "",
+   "text_entities": []
+  },
+  {
+   "id": 2,
+   "type": "message",
+   "date": "2024-03-01T08:00:00",
+   "date_unixtime": "1709280000",
+   "from": "Злата Куприянова",
+   "from_id": "user1002",
+   "text": "привет, ты где?",
+   "text_entities": [
+    {
+     "type": "plain",
+     "text": "привет, ты где?"
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "type": "message",
+   "date": "2024-03-01T08:00:40",
+   "date_unixtime": "1709280040",
+   "from": "Радомир Ясенев",
+   "from_id": "user1001",
+   "text": "дома, только проснулся",
+   "text_entities": [
+    {
+     "type": "plain",
+     "text": "дома, только проснулся"
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "type": "message",
+   "date": "2024-03-01T08:01:30",
+   "date_unixtime": "1709280090",
+   "from": "Радомир Ясенев",
+   "from_id": "user1001",
+   "text": "а что",
+   "text_entities": [
+    {
+     "type": "plain",
+     "text": "а что"
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "type": "message",
+   "date": "2024-03-01T08:02:30",
+   "date_unixtime": "1709280150",
+   "from": "Злата Куприянова",
+   "from_id": "user1002",
+   "text": [
+    "глянь ",
+    {
+     "type": "link",
+     "text": "https://example.com/post/1"
+    },
+    " там ",
+    {
+     "type": "bold",
+     "text": "жесть"
+    }
+   ],
+   "text_entities": [
+    {
+     "type": "plain",
+     "text": "глянь "
+    },
+    {
+     "type": "link",
+     "text": "https://example.com/post/1"
+    },
+    {
+     "type": "plain",
+     "text": " там "
+    },
+    {
+     "type": "bold",
+     "text": "жесть"
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "type": "message",
+   "date": "2024-03-01T08:03:20",
+   "date_unixtime": "1709280200",
+   "from": "Радомир Ясенев",
+   "from_id": "user1001",
+   "text": "",
+   "text_entities": [],
+   "media_type": "sticker",
+   "sticker_emoji": "😂",
+   "file": "stickers/sticker.webp",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "id": 7,
+   "type": "message",
+   "date": "2024-03-01T08:03:50",
+   "date_unixtime": "1709280230",
+   "from": "Радомир Ясенев",
+   "from_id": "user1001",
+   "text": "ахаха ну ты даёшь",
+   "text_entities": [
+    {
+     "type": "plain",
+     "text": "ахаха ну ты даёшь"
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "type": "message",
+   "date": "2024-03-01T08:06:40",
+   "date_unixtime": "1709280400",
+   "from": "Злата Куприянова",
+   "from_id": "user1002",
+   "text": "смотри какой кот",
+   "text_entities": [
+    {
+     "type": "plain",
+     "text": "смотри какой кот"
+    }
+   ],
+   "photo": "photos/photo_1.jpg",
+   "width": 800,
+   "height": 600
+  },
+  {
+   "id": 9,
+   "type": "message",
+   "date": "2024-03-01T08:06:50",
+   "date_unixtime": "1709280410",
+   "from": "Злата Куприянова",
+   "from_id": "user1002",
+   "text": "",
+   "text_entities": [],
+   "photo": "photos/photo_2.jpg",
+   "width": 800,
+   "height": 600
+  },
+  {
+   "id": 10,
+   "type": "message",
+   "date": "2024-03-01T08:08:20",
+   "date_unixtime": "1709280500",
+   "from": "Радомир Ясенев",
+   "from_id": "user1001",
+   "text": "",
+   "text_entities": [],
+   "media_type": "voice_message",
+   "file": "voice_messages/audio_1.ogg",
+   "duration_seconds": 7,
+   "mime_type": "audio/ogg"
+  },
+  {
+   "id": 11,
+   "type": "message",
+   "date": "2024-03-01T08:08:40",
+   "date_unixtime": "1709280520",
+   "from": "Радомир Ясенев",
+   "from_id": "user1001",
+   "text": "мой лучше",
+   "text_entities": [
+    {
+     "type": "plain",
+     "text": "мой лучше"
+    }
+   ],
+   "reply_to_message_id": 8
+  },
+  {
+   "id": 12,
+   "type": "message",
+   "date": "2024-03-01T08:11:40",
+   "date_unixtime": "1709280700",
+   "from": "Злата Куприянова",
+   "from_id": "user1002",
+   "text": "Приходите на встречу выпускников в субботу!",
+   "text_entities": [
+    {
+     "type": "plain",
+     "text": "Приходите на встречу выпускников в субботу!"
+    }
+   ],
+   "forwarded_from": "Школьный чат"
+  },
+  {
+   "id": 13,
+   "type": "message",
+   "date": "2024-03-01T08:12:40",
+   "date_unixtime": "1709280760",
+   "from": "Радомир Ясенев",
+   "from_id": "user1001",
+   "text": "ок",
+   "text_entities": [
+    {
+     "type": "plain",
+     "text": "ок"
+    }
+   ]
+  },
+  {
+   "id": 14,
+   "type": "message",
+   "date": "2024-03-01T08:13:10",
+   "date_unixtime": "1709280790",
+   "from": "Радомир Ясенев",
+   "from_id": "user1001",
+   "text": "😂😂",
+   "text_entities": [
+    {
+     "type": "plain",
+     "text": "😂😂"
+    }
+   ]
+  },
+  {
+   "id": 15,
+   "type": "message",
+   "date": "2024-03-01T08:13:40",
+   "date_unixtime": "1709280820",
+   "from": "Радомир Ясенев",
+   "from_id": "user1001",
+   "text": "https://example.com",
+   "text_entities": [
+    {
+     "type": "link",
+     "text": "https://example.com"
+    }
+   ]
+  },
+  {
+   "id": 16,
+   "type": "message",
+   "date": "2024-03-01T09:06:40",
+   "date_unixtime": "1709284000",
+   "from": "Злата Куприянова",
+   "from_id": "user1002",
+   "text": [
+    "спроси у ",
+    {
+     "type": "mention",
+     "text": "@someone"
+    },
+    " он знает"
+   ],
+   "text_entities": [
+    {
+     "type": "plain",
+     "text": "спроси у "
+    },
+    {
+     "type": "mention",
+     "text": "@someone"
+    },
+    {
+     "type": "plain",
+     "text": " он знает"
+    }
+   ]
+  },
+  {
+   "id": 17,
+   "type": "message",
+   "date": "2024-03-01T09:08:20",
+   "date_unixtime": "1709284100",
+   "from": "Радомир Ясенев",
+   "from_id": "user1001",
+   "text": "ладно\nнапишу ему вечером\nесли не забуду",
+   "text_entities": [
+    {
+     "type": "plain",
+     "text": "ладно\nнапишу ему вечером\nесли не забуду"
+    }
+   ],
+   "edited": "2024-03-01T09:15:00",
+   "edited_unixtime": "1709284500"
+  },
+  {
+   "id": 18,
+   "type": "message",
+   "date": "2024-03-01T11:20:00",
+   "date_unixtime": "1709292000",
+   "from": "Злата Куприянова",
+   "from_id": "user1002",
+   "text": "ну что, написал?",
+   "text_entities": [
+    {
+     "type": "plain",
+     "text": "ну что, написал?"
+    }
+   ]
+  },
+  {
+   "id": 19,
+   "type": "message",
+   "date": "2024-03-01T13:21:40",
+   "date_unixtime": "1709299300",
+   "from": "Радомир Ясенев",
+   "from_id": "user1001",
+   "text": "не, забыл конечно",
+   "text_entities": [
+    {
+     "type": "plain",
+     "text": "не, забыл конечно"
+    }
+   ]
+  },
+  {
+   "id": 20,
+   "type": "message",
+   "date": "2024-03-02T09:00:00",
+   "date_unixtime": "1709370000",
+   "from": "Злата Куприянова",
+   "from_id": "user1002",
+   "text": "доброе утро",
+   "text_entities": [
+    {
+     "type": "plain",
+     "text": "доброе утро"
+    }
+   ]
+  },
+  {
+   "id": 21,
+   "type": "message",
+   "date": "2024-03-02T09:01:00",
+   "date_unixtime": "1709370060",
+   "from": "Радомир Ясенев",
+   "from_id": "user1001",
+   "text": "утро",
+   "text_entities": [
+    {
+     "type": "plain",
+     "text": "утро"
+    }
+   ]
+  }
+ ]
+}
