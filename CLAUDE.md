@@ -4,7 +4,6 @@ Telegram Business bot that replies from a connected account in the writing style
 person from a Telegram export. Three generation modes behind one interface (RAG,
 fine-tuned LoRA on Modal, hybrid) and one evaluation harness with a blind LLM judge.
 Educational portfolio project; the repository is public and must contain no personal data.
-
 ## Process (non-negotiable)
 
 - Work one phase at a time (table below). Before a phase: state goal, files, acceptance.
@@ -16,8 +15,8 @@ Educational portfolio project; the repository is public and must contain no pers
 - `/systematic-debugging` (Debug Report) before changing code on any failure.
   `/analyze` checklist before showing dataset or eval numbers. `/modern-web-guidance`
   before any HTML, `/design-critique` after. `/skill-creator` for project skills.
-- Push only on explicit command; before the first push run `gitleaks detect` over the
-  full history and grep the blocklist over all commits.
+- Push only on explicit command; before the first push: `gitleaks detect` over the full
+  history and a blocklist grep over all commits.
 
 | # | Phase | Status |
 |---|---|---|
@@ -33,7 +32,6 @@ Educational portfolio project; the repository is public and must contain no pers
 | 9 | Real fine-tune and three-mode comparison | |
 
 ## Stack and layout
-
 Python 3.11, `uv`, `ruff`, `pytest`, `typer`, `pydantic-settings`, `structlog`,
 `aiogram` 3 (Business updates, long polling), `openai` SDK against OpenAI-compatible
 gateways, ChromaDB, Unsloth + TRL on Modal GPU, vLLM on Modal. No Docker, no webhook,
@@ -57,7 +55,6 @@ training/ serving/ deploy/ docs/   data/ (gitignored except README and manifest)
 ```
 
 ## Conventions
-
 - Code, comments, docs, commits: English. Anything fed to an LLM (persona, style
   profile, judge rubric): Russian. Persona name only via `TWIN_NAME` / `{name}`.
 - Dataset formats are contracts: Pydantic schemas in `core/schemas.py`, deterministic
@@ -98,6 +95,4 @@ who may send `/twin` commands; `ALLOWED_USER_IDS` = exactly two chat partners.
 - Git identity is set locally to the project handle; no other identity in history.
 
 ## Commands
-
-`uv sync` · `uv run twin --help` · `uv run pytest` · `uv run ruff check .` ·
-`uv run ruff format .` · `uv run pre-commit run --all-files`
+`uv sync` · `uv run twin --help` · `uv run pytest` · `uv run ruff check .` · `uv run ruff format .` · `uv run pre-commit run --all-files`
