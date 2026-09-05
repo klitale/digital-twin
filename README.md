@@ -13,7 +13,9 @@ evaluation harness and the same blind LLM judge:
 | `finetuned` | Qwen 2.5 7B Instruct + LoRA (Unsloth), served by vLLM on Modal; style profile only |
 | `hybrid` | the fine-tuned model + retrieved examples |
 
-> Status: work in progress, built phase by phase. Phase 0 (project skeleton) is done.
+> Status: work in progress, built phase by phase. Done so far: project skeleton, export
+> parsing (`twin ingest`), context/reply pairs with a time-based holdout split and a
+> profiling report (`twin analyze-data`).
 
 ## Pipeline
 

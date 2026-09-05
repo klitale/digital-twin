@@ -23,8 +23,8 @@ Educational portfolio project; the repository is public and must contain no pers
 |---|---|---|
 | 0 | Bootstrap (this skeleton) | done |
 | 1 | Export parsing → `messages.jsonl` | done |
-| 2 | Pairs, time-based split, profiling report | next |
-| 3 | Style profile | |
+| 2 | Pairs, time-based split, profiling report | done |
+| 3 | Style profile | next |
 | 4 | Index, retrieval, prompt, RAG backend, `twin chat` | |
 | 5 | Business bot + VPS inventory/deploy | |
 | 6 | Fine-tuning pipeline + Modal serving + backends | |
@@ -42,7 +42,9 @@ no userbot, no local model serving.
 ```
 src/twin/  config.py (Settings, require_*), cli.py, logsetup.py
            core/schemas.py (Message, manifests, DropReason)
-           ingest/parse_export.py (pure parser), pipeline.py (twin ingest), stats.py (5.4)
+           ingest/parse_export.py (parser), reconstruct.py (turns, pairs), anonymize.py,
+           split.py (time tail + seeded eval sample, leakage asserts), profile_dataset.py,
+           dataconfig.py (configs/data/*.yaml), pipeline.py (twin ingest), stats.py (5.4)
            bot/ eval/                          # added phase by phase
 scripts/privacy_check.py   tests/ (synthetic fixtures only)   prompts/ configs/
 training/ serving/ deploy/ docs/   data/ (gitignored except README and manifest)
@@ -56,6 +58,9 @@ training/ serving/ deploy/ docs/   data/ (gitignored except README and manifest)
   transformations, every dropped record counted by reason. Never clean data silently.
 - Holdout is never used for training, indexing, few-shot or prompt tuning; retrieval
   never returns the target reply, holdout records or records later than the query.
+  Split: per chat, the last `split.tail_fraction` of pairs by time is the holdout tail
+  (`holdout.jsonl`, all of it quarantined); `eval_sample=true` marks the seeded,
+  month-stratified evaluation rows. `dataset_manifest.json` is committed: counts only.
 - Every generated reply is one structlog record: timestamp, chat_id, message_id, mode,
   model, prompt_version, retrieved_example_ids, params, latency, response, dry_run.
   Never log tokens, keys or full business-connection payloads (`logsetup` redacts).

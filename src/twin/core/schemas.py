@@ -58,6 +58,67 @@ class Message(BaseModel):
     ts_source: str = Field(default="date_unixtime", description="date_unixtime | date_local")
 
 
+class ContextTurn(BaseModel):
+    """One preceding turn in a pair's context."""
+
+    model_config = ConfigDict(frozen=True)
+
+    sender_name: str | None
+    is_me: bool
+    text: str
+
+
+class Pair(BaseModel):
+    """A twin reply with the conversation that preceded it (``pairs.jsonl`` row)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    pair_id: str = Field(description="'<chat_id>:<first reply message_id>'")
+    chat_id: int
+    conversation_id: str = Field(description="'<chat_id>:<session index>' (gap > context age)")
+    ts: int = Field(description="Unix seconds UTC of the first reply message.")
+    period: str = Field(description="YYYY-MM of ts (UTC), the stratification unit.")
+    context: list[ContextTurn]
+    reply: str
+    reply_message_ids: list[int]
+    eval_sample: bool = Field(default=False, description="Holdout rows chosen for evaluation.")
+
+
+class ChatSplitSummary(BaseModel):
+    """Per-chat split counts keyed by position, never by Telegram id."""
+
+    chat_index: int
+    pairs: int
+    train: int
+    holdout: int
+    cutoff_date: str | None = Field(description="YYYY-MM-DD (UTC) of the first holdout pair.")
+    too_short_for_holdout: bool
+
+
+class DatasetManifest(BaseModel):
+    """Counts-only, committed description of ``pairs.jsonl`` / ``holdout.jsonl``."""
+
+    dataset_version: str = Field(description="sha256 prefix over pairs.jsonl + holdout.jsonl")
+    messages_dataset_version: str
+    config: dict[str, object]
+    config_source: str = Field(description="YAML path or 'built-in defaults'")
+    messages: int
+    turns: int
+    twin_turns: int
+    conversations: int
+    pairs_kept: int
+    pairs_dropped: dict[str, int]
+    anonymized: dict[str, int]
+    train: int
+    holdout_tail: int
+    eval_sample: int
+    eval_sample_by_period: dict[str, int]
+    chats: list[ChatSplitSummary]
+    per_year: dict[str, dict[str, int]] = Field(description="year -> {train, holdout}")
+    reply_chars: dict[str, int] = Field(description="p50, p90, p99, max, over_max")
+    context_turns: dict[str, int] = Field(description="p50, p90, max")
+
+
 class ChatSummary(BaseModel):
     """Per-chat counts for the manifest. No names."""
 

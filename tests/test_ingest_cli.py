@@ -8,7 +8,7 @@ from typer.testing import CliRunner
 
 from twin.cli import app
 from twin.config import ConfigError, Settings
-from twin.core.schemas import ChatSummary, ExportKind, MessagesManifest
+from twin.core.schemas import ChatSummary, DatasetManifest, ExportKind, MessagesManifest
 from twin.ingest.pipeline import resolve_export_path
 
 runner = CliRunner()
@@ -168,3 +168,56 @@ def test_resolve_export_path_branches(tmp_path: Path, synthetic_export_path: Pat
         target.write_bytes(synthetic_export_path.read_bytes())
     with pytest.raises(ConfigError, match=r"2 result\.json"):
         resolve_export_path(settings, None)
+
+
+def test_ingest_builds_pairs_split_and_report(
+    env: Path, synthetic_export_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("TWIN_SENDER_ID", "1001")
+    config = Path(__file__).parent.parent / "configs" / "data" / "default.yaml"
+    result = runner.invoke(
+        app, ["ingest", "--export", str(synthetic_export_path), "--config", str(config)]
+    )
+    assert result.exit_code == 0, result.output
+    assert "messages 17 -> turns 14 -> twin turns 7 -> pairs 6" in result.output
+    assert "too short for holdout" in result.output
+    processed = env / "processed"
+    assert len((processed / "pairs.jsonl").read_text(encoding="utf-8").splitlines()) == 6
+    assert (processed / "holdout.jsonl").read_text(encoding="utf-8") == ""
+    manifest = DatasetManifest.model_validate_json(
+        (processed / "dataset_manifest.json").read_text()
+    )
+    assert manifest.messages == 17 and manifest.pairs_kept == 6 and manifest.train == 6
+    assert manifest.pairs_dropped == {"no_context": 1}
+    assert manifest.anonymized == {"mention": 1}
+    assert manifest.config["split"]["eval_sample_size"] == 80
+    assert manifest.config_source == str(config)
+    assert manifest.chats[0].too_short_for_holdout is True
+    manifest_text = (processed / "dataset_manifest.json").read_text(encoding="utf-8")
+    assert "1002" not in manifest_text and "Злата" not in manifest_text  # counts only
+    report = (processed / "profile_report.md").read_text(encoding="utf-8")
+    assert "## Caveats" in report and "contributes no holdout" in report
+
+    analyze = runner.invoke(app, ["analyze-data", "--config", str(config)])
+    assert analyze.exit_code == 0, analyze.output
+    assert "Caveats:" in analyze.output and "contributes no holdout" in analyze.output
+
+
+def test_ingest_stop_after_parse(
+    env: Path, synthetic_export_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("TWIN_SENDER_ID", "1001")
+    result = runner.invoke(
+        app, ["ingest", "--export", str(synthetic_export_path), "--stop-after", "parse"]
+    )
+    assert result.exit_code == 0, result.output
+    assert not (env / "processed" / "pairs.jsonl").exists()
+    bad = runner.invoke(
+        app, ["ingest", "--export", str(synthetic_export_path), "--stop-after", "x"]
+    )
+    assert bad.exit_code == 2
+
+
+def test_analyze_data_without_dataset(env: Path) -> None:
+    result = runner.invoke(app, ["analyze-data"])
+    assert result.exit_code == 1 and "run `twin ingest` first" in result.output

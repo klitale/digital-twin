@@ -1,17 +1,29 @@
-"""Orchestration of ``twin ingest``: locate the export, parse, write outputs, report.
+"""Orchestration of ``twin ingest`` and ``twin analyze-data``.
 
-Phase 1 stops after ``messages.jsonl``; reconstruction, pairs and the split are added in
-Phase 2 as further steps of the same pipeline.
+``run_parse`` (Phase 1) writes ``messages.jsonl``; ``run_pairs`` (Phase 2) turns it
+into ``pairs.jsonl`` / ``holdout.jsonl`` with a counts-only ``dataset_manifest.json``
+and a Markdown profiling report.
 """
 
 from __future__ import annotations
 
 import hashlib
+from collections import Counter
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from twin.config import ConfigError, Settings
-from twin.core.schemas import ExportKind, MessagesManifest, counter_to_dict
+from twin.core.schemas import (
+    DatasetManifest,
+    ExportKind,
+    Message,
+    MessagesManifest,
+    Pair,
+    counter_to_dict,
+)
+from twin.ingest.anonymize import anonymize_text
+from twin.ingest.dataconfig import DataConfig
 from twin.ingest.parse_export import (
     ParseResult,
     load_export,
@@ -19,10 +31,17 @@ from twin.ingest.parse_export import (
     top_senders,
     write_messages_jsonl,
 )
-from twin.ingest.stats import message_stats
+from twin.ingest.profile_dataset import render_report
+from twin.ingest.reconstruct import build_pairs, build_turns
+from twin.ingest.split import split_pairs
+from twin.ingest.stats import message_stats, quantile
 
 MESSAGES_FILE = "messages.jsonl"
 MESSAGES_MANIFEST = "messages_manifest.json"
+PAIRS_FILE = "pairs.jsonl"
+HOLDOUT_FILE = "holdout.jsonl"
+DATASET_MANIFEST = "dataset_manifest.json"
+PROFILE_REPORT = "profile_report.md"
 
 
 class SenderNotConfiguredError(ConfigError):
@@ -44,6 +63,46 @@ class SenderNotConfiguredError(ConfigError):
         )
 
 
+# --- shared helpers -------------------------------------------------------------------
+
+
+def file_sha256(path: Path) -> tuple[str, int]:
+    digest = hashlib.sha256()
+    size = 0
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            digest.update(chunk)
+            size += len(chunk)
+    return digest.hexdigest(), size
+
+
+def write_jsonl(rows: Iterable[Pair], path: Path) -> int:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    count = 0
+    with path.open("w", encoding="utf-8") as fh:
+        for row in rows:
+            fh.write(row.model_dump_json())
+            fh.write("\n")
+            count += 1
+    return count
+
+
+def read_pairs_jsonl(path: Path) -> list[Pair]:
+    pairs: list[Pair] = []
+    with path.open(encoding="utf-8") as fh:
+        for lineno, line in enumerate(fh, start=1):
+            if not line.strip():
+                continue
+            try:
+                pairs.append(Pair.model_validate_json(line))
+            except ValueError as exc:
+                raise ValueError(f"{path}:{lineno}: invalid pair record") from exc
+    return pairs
+
+
+# --- Phase 1: parse ---------------------------------------------------------------------
+
+
 @dataclass
 class IngestReport:
     export_path: Path
@@ -52,6 +111,7 @@ class IngestReport:
     manifest_path: Path
     manifest: MessagesManifest
     stats: dict[str, object]
+    messages: list[Message]
 
 
 def resolve_export_path(settings: Settings, explicit: Path | None) -> Path:
@@ -75,16 +135,6 @@ def resolve_export_path(settings: Settings, explicit: Path | None) -> Path:
     raise ConfigError(
         f"{len(candidates)} result.json files under {raw_dir}; set RAW_EXPORT_PATH or pass --export"
     )
-
-
-def file_sha256(path: Path) -> tuple[str, int]:
-    digest = hashlib.sha256()
-    size = 0
-    with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 20), b""):
-            digest.update(chunk)
-            size += len(chunk)
-    return digest.hexdigest(), size
 
 
 def build_manifest(
@@ -147,6 +197,7 @@ def run_parse(settings: Settings, explicit_export: Path | None = None) -> Ingest
         manifest_path=manifest_path,
         manifest=manifest,
         stats=stats,
+        messages=result.messages,
     )
 
 
@@ -193,3 +244,199 @@ def format_report(report: IngestReport) -> str:
 
 def _twin_marker(raw_id: str, twin_sender_id: int) -> str:
     return "   <- twin" if raw_id == f"user{twin_sender_id}" else ""
+
+
+# --- Phase 2: pairs, split, profile -----------------------------------------------------
+
+
+@dataclass
+class PairsReport:
+    pairs_path: Path
+    holdout_path: Path
+    manifest_path: Path
+    report_path: Path
+    manifest: DatasetManifest
+    report: str
+
+
+def anonymize_messages(
+    messages: Sequence[Message], config: DataConfig
+) -> tuple[list[Message], Counter[str]]:
+    counts: Counter[str] = Counter()
+    out: list[Message] = []
+    for message in messages:
+        text, replaced = anonymize_text(message.text, config.anonymize)
+        counts.update(replaced)
+        out.append(message if text == message.text else message.model_copy(update={"text": text}))
+    return out, counts
+
+
+def dataset_version_of(paths: Sequence[Path]) -> str:
+    digest = hashlib.sha256()
+    for path in paths:
+        digest.update(path.read_bytes())
+    return digest.hexdigest()[:12]
+
+
+class AccountingError(RuntimeError):
+    """Counts that must add up do not; the dataset is not written."""
+
+
+def _check_accounting(name: str, left: int, right: int) -> None:
+    if left != right:
+        raise AccountingError(f"{name}: {left} != {right}")
+
+
+def run_pairs(
+    settings: Settings,
+    config: DataConfig,
+    messages: Sequence[Message],
+    messages_version: str,
+    config_source: str = "built-in defaults",
+) -> PairsReport:
+    anonymized, anonymized_counts = anonymize_messages(messages, config)
+    by_chat: dict[int, list[Message]] = {}
+    for message in anonymized:
+        by_chat.setdefault(message.chat_id, []).append(message)
+
+    all_pairs: list[Pair] = []
+    dropped: Counter[str] = Counter()
+    turns_total = twin_turns = conversations = 0
+    for chat_messages in by_chat.values():
+        chat_messages.sort(key=lambda m: (m.ts, m.message_id))
+        turns = build_turns(chat_messages, config.turns.merge_window_seconds)
+        built = build_pairs(turns, config)
+        all_pairs.extend(built.pairs)
+        dropped.update(built.dropped)
+        turns_total += len(turns)
+        twin_turns += built.twin_turns
+        conversations += built.conversations
+
+    split = split_pairs(all_pairs, config.split)
+    _check_accounting(
+        "pairs + dropped vs twin turns", len(all_pairs) + sum(dropped.values()), twin_turns
+    )
+    _check_accounting(
+        "train + holdout vs pairs", len(split.train) + len(split.holdout), len(all_pairs)
+    )
+    _check_accounting(
+        "eval sample by period vs flags",
+        sum(split.eval_by_period.values()),
+        sum(1 for p in split.holdout if p.eval_sample),
+    )
+
+    processed = settings.processed_dir
+    processed.mkdir(parents=True, exist_ok=True)
+    pairs_path = processed / PAIRS_FILE
+    holdout_path = processed / HOLDOUT_FILE
+    write_jsonl(split.train, pairs_path)
+    write_jsonl(split.holdout, holdout_path)
+
+    per_year: dict[str, dict[str, int]] = {}
+    for name, rows in (("train", split.train), ("holdout", split.holdout)):
+        for pair in rows:
+            year = pair.period[:4]
+            per_year.setdefault(year, {"train": 0, "holdout": 0})[name] += 1
+    _check_accounting(
+        "per-year vs train", sum(v["train"] for v in per_year.values()), len(split.train)
+    )
+    _check_accounting(
+        "per-year vs holdout", sum(v["holdout"] for v in per_year.values()), len(split.holdout)
+    )
+    kept = [*split.train, *split.holdout]
+    reply_lengths = sorted(len(p.reply) for p in kept)
+    context_turns = sorted(len(p.context) for p in kept)
+    manifest = DatasetManifest(
+        dataset_version=dataset_version_of([pairs_path, holdout_path]),
+        messages_dataset_version=messages_version,
+        config=config.model_dump(mode="json"),
+        config_source=config_source,
+        messages=len(messages),
+        turns=turns_total,
+        twin_turns=twin_turns,
+        conversations=conversations,
+        pairs_kept=len(all_pairs),
+        pairs_dropped=counter_to_dict(dropped),
+        anonymized=counter_to_dict(anonymized_counts),
+        train=len(split.train),
+        holdout_tail=len(split.holdout),
+        eval_sample=sum(1 for p in split.holdout if p.eval_sample),
+        eval_sample_by_period=dict(sorted(split.eval_by_period.items())),
+        chats=split.chats,
+        per_year=dict(sorted(per_year.items())),
+        reply_chars={
+            "p50": quantile(reply_lengths, 0.5),
+            "p90": quantile(reply_lengths, 0.9),
+            "p99": quantile(reply_lengths, 0.99),
+            "max": reply_lengths[-1] if reply_lengths else 0,
+            "over_max": sum(1 for n in reply_lengths if n > config.reply.max_chars),
+        },
+        context_turns={
+            "p50": quantile(context_turns, 0.5),
+            "p90": quantile(context_turns, 0.9),
+            "max": context_turns[-1] if context_turns else 0,
+        },
+    )
+    manifest_path = processed / DATASET_MANIFEST
+    manifest_path.write_text(manifest.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    report = render_report(split.train, split.holdout, manifest, config)
+    report_path = processed / PROFILE_REPORT
+    report_path.write_text(report, encoding="utf-8")
+    return PairsReport(
+        pairs_path=pairs_path,
+        holdout_path=holdout_path,
+        manifest_path=manifest_path,
+        report_path=report_path,
+        manifest=manifest,
+        report=report,
+    )
+
+
+def load_processed(settings: Settings) -> tuple[list[Pair], list[Pair], DatasetManifest]:
+    processed = settings.processed_dir
+    for name in (PAIRS_FILE, HOLDOUT_FILE, DATASET_MANIFEST):
+        if not (processed / name).is_file():
+            raise ConfigError(f"{processed / name} not found; run `twin ingest` first")
+    manifest = DatasetManifest.model_validate_json(
+        (processed / DATASET_MANIFEST).read_text(encoding="utf-8")
+    )
+    return (
+        read_pairs_jsonl(processed / PAIRS_FILE),
+        read_pairs_jsonl(processed / HOLDOUT_FILE),
+        manifest,
+    )
+
+
+def run_profile(settings: Settings, config: DataConfig) -> Path:
+    """``twin analyze-data``: rebuild the report from the files on disk."""
+    train, holdout, manifest = load_processed(settings)
+    report_path = settings.processed_dir / PROFILE_REPORT
+    report_path.write_text(render_report(train, holdout, manifest, config), encoding="utf-8")
+    return report_path
+
+
+def format_pairs_report(report: PairsReport) -> str:
+    m = report.manifest
+    lines = [
+        f"pairs.jsonl: {report.pairs_path} ({m.train} train)",
+        f"holdout.jsonl: {report.holdout_path} ({m.holdout_tail} tail, {m.eval_sample} eval)",
+        f"dataset_manifest.json: {report.manifest_path} (dataset_version {m.dataset_version}, "
+        f"config: {m.config_source})",
+        f"profile report: {report.report_path}",
+        "",
+        f"messages {m.messages} -> turns {m.turns} -> twin turns {m.twin_turns} "
+        f"-> pairs {m.pairs_kept}",
+        *_section("twin turns dropped by reason", m.pairs_dropped),
+        *_section("anonymized", m.anonymized),
+        "split per chat:",
+        *[
+            f"  chat {c.chat_index}: pairs {c.pairs}, train {c.train}, holdout {c.holdout}, "
+            f"cutoff {c.cutoff_date}{' (too short for holdout)' if c.too_short_for_holdout else ''}"
+            for c in m.chats
+        ],
+        "eval sample by period: "
+        + ", ".join(f"{k}: {v}" for k, v in m.eval_sample_by_period.items()),
+        f"reply chars: {m.reply_chars}",
+        f"context turns: {m.context_turns}",
+    ]
+    return "\n".join(lines)

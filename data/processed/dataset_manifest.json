@@ -1,0 +1,135 @@
+{
+  "dataset_version": "971a2c2c6448",
+  "messages_dataset_version": "999f2f3a9ff0",
+  "config": {
+    "version": 1,
+    "turns": {
+      "merge_window_seconds": 180
+    },
+    "context": {
+      "max_turns": 6,
+      "max_age_seconds": 7200,
+      "require_partner_last": true
+    },
+    "reply": {
+      "min_chars": 3,
+      "max_chars": 2000,
+      "drop_no_words": true,
+      "drop_bare_links": true,
+      "exclude_forwarded": true
+    },
+    "anonymize": {
+      "phones": true,
+      "emails": true,
+      "cards": true,
+      "token_urls": true,
+      "mentions": true
+    },
+    "filters": {
+      "min_date": null
+    },
+    "split": {
+      "tail_fraction": 0.05,
+      "min_pairs_per_chat": 20,
+      "eval_sample_size": 80,
+      "stratify_by": "month",
+      "seed": 20260905
+    }
+  },
+  "config_source": "configs/data/default.yaml",
+  "messages": 103208,
+  "turns": 50257,
+  "twin_turns": 24533,
+  "conversations": 2447,
+  "pairs_kept": 22040,
+  "pairs_dropped": {
+    "no_partner_context": 920,
+    "reply_too_short": 752,
+    "no_context": 662,
+    "reply_forwarded_only": 93,
+    "reply_bare_link": 46,
+    "reply_no_words": 17,
+    "reply_too_long": 3
+  },
+  "anonymized": {
+    "mention": 56,
+    "token_url": 33,
+    "email": 13,
+    "card": 11,
+    "phone": 10
+  },
+  "train": 20938,
+  "holdout_tail": 1102,
+  "eval_sample": 80,
+  "eval_sample_by_period": {
+    "2026-05": 10,
+    "2026-06": 10,
+    "2026-07": 33,
+    "2026-08": 20,
+    "2026-09": 7
+  },
+  "chats": [
+    {
+      "chat_index": 1,
+      "pairs": 22040,
+      "train": 20938,
+      "holdout": 1102,
+      "cutoff_date": "2026-05-14",
+      "too_short_for_holdout": false
+    }
+  ],
+  "per_year": {
+    "2017": {
+      "train": 283,
+      "holdout": 0
+    },
+    "2018": {
+      "train": 8227,
+      "holdout": 0
+    },
+    "2019": {
+      "train": 3549,
+      "holdout": 0
+    },
+    "2020": {
+      "train": 2651,
+      "holdout": 0
+    },
+    "2021": {
+      "train": 958,
+      "holdout": 0
+    },
+    "2022": {
+      "train": 1146,
+      "holdout": 0
+    },
+    "2023": {
+      "train": 1839,
+      "holdout": 0
+    },
+    "2024": {
+      "train": 324,
+      "holdout": 0
+    },
+    "2025": {
+      "train": 1471,
+      "holdout": 0
+    },
+    "2026": {
+      "train": 490,
+      "holdout": 1102
+    }
+  },
+  "reply_chars": {
+    "p50": 24,
+    "p90": 74,
+    "p99": 188,
+    "max": 1137,
+    "over_max": 0
+  },
+  "context_turns": {
+    "p50": 6,
+    "p90": 6,
+    "max": 6
+  }
+}

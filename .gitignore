@@ -37,3 +37,8 @@ build/
 # --- Local tool state -----------------------------------------------------
 .claude/settings.local.json
 *.log
+
+# --- Coverage artefacts ---------------------------------------------------
+.coverage
+.coverage.*
+htmlcov/
