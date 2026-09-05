@@ -24,8 +24,8 @@ Educational portfolio project; the repository is public and must contain no pers
 | 0 | Bootstrap (this skeleton) | done |
 | 1 | Export parsing → `messages.jsonl` | done |
 | 2 | Pairs, time-based split, profiling report | done |
-| 3 | Style profile | next |
-| 4 | Index, retrieval, prompt, RAG backend, `twin chat` | |
+| 3 | Style profile | done |
+| 4 | Index, retrieval, prompt, RAG backend, `twin chat` | next |
 | 5 | Business bot + VPS inventory/deploy | |
 | 6 | Fine-tuning pipeline + Modal serving + backends | |
 | 7 | Eval harness, judge, compare, HTML report | |
