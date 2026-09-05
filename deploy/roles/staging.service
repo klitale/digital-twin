@@ -1,0 +1,24 @@
+[Unit]
+Description=digital-twin staging bot (permanent dry run)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=twin
+Group=twin
+WorkingDirectory=/opt/twin
+EnvironmentFile=/opt/twin/.env
+Environment=DATA_DIR=/opt/twin/data
+Environment=PYTHONUNBUFFERED=1
+Environment=DRY_RUN=true
+ExecStart=/opt/twin/.venv/bin/twin run
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/twin/data
+
+[Install]
+WantedBy=multi-user.target
