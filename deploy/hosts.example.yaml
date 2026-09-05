@@ -1,0 +1,14 @@
+# Copy to deploy/hosts.yaml (gitignored) and fill in your servers.
+# Either give an ssh alias from ~/.ssh/config or host/user/port/identity_file.
+# `role` is assigned after `deploy/inventory.sh` and your approval.
+hosts:
+  - name: vps-1
+    ssh_alias: vps1          # or: host: 203.0.113.10, user: root, port: 22, identity_file: ~/.ssh/key
+    role: null               # bot | jobs | staging
+    note: what else runs here
+  - name: vps-2
+    ssh_alias: vps2
+    role: null
+  - name: vps-3
+    ssh_alias: vps3
+    role: null

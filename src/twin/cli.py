@@ -283,7 +283,17 @@ def run(
     ] = False,
 ) -> None:
     """Run the Telegram Business bot (long polling)."""
-    _not_yet("run", 5)
+    from twin.bot.app import main as run_main
+    from twin.config import ConfigError, load_settings
+    from twin.core.prompts import PromptError
+    from twin.core.vector_store import IndexMismatchError
+
+    settings = load_settings()
+    try:
+        run_main(settings, dry_run)
+    except (ConfigError, PromptError, IndexMismatchError) as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
 
 
 @app.command()
