@@ -5,7 +5,6 @@ person from a Telegram export. Three generation modes behind one interface (RAG,
 fine-tuned LoRA on Modal, hybrid) and one evaluation harness with a blind LLM judge.
 Educational portfolio project; the repository is public and must contain no personal data.
 ## Process (non-negotiable)
-
 - Work one phase at a time (table below). Before a phase: state goal, files, acceptance.
   After: `uv run pytest`, `uv run ruff check .`, phase checks, commit, report with
   caveats, then stop and wait for approval. Never start the next phase silently.
@@ -77,21 +76,17 @@ prompts/<name>_v<N>.md  configs/data/default.yaml (min_date 2021, 15% tail)  tra
   `index_manifest.json` pins provider/model/dimension/dataset, mismatch fails loudly.
 
 ## Deployment facts (Phase 5)
-- Roles: bot = srv-b (`/opt/twin`, systemd `twin`, RSS ~230 MB), jobs = srv-c (`~/twin`,
-  no sudo, CLI only), staging = srv-a installed but **disabled**: one bot token allows one
-  polling instance and one Business account allows one chatbot, so staging needs its own
-  bot + account. Deploy path today: `deploy/push.sh` (rsync); `git pull` once on GitHub.
-- The bot starts with `DRY_RUN` from `.env` and idles until a business connection arrives.
+bot = srv-b (`/opt/twin`, systemd `twin`, RSS ~230 MB, starts with `DRY_RUN` from `.env`),
+jobs = srv-c (`~/twin`, no sudo, CLI only), staging = srv-a installed but **disabled**: one
+token = one polling instance, one Business account = one chatbot, so staging needs its own
+bot and account. Deploy path today `deploy/push.sh` (rsync); `git pull` once on GitHub.
 
-## Telegram identities (three different accounts in this deployment)
-
-`TWIN_SENDER_ID` = whose export messages are the replies; `BUSINESS_OWNER_ID` = the
-account the bot is connected to (connection `user_id` must match); `ADMIN_USER_IDS` =
-who may send `/twin` commands; `ALLOWED_USER_IDS` = exactly two chat partners.
-`Settings.require_bot()` / `require_ingest()` / `require_llm()` enforce these per command.
+## Telegram identities (three different accounts here)
+`TWIN_SENDER_ID` = whose export messages are the replies; `BUSINESS_OWNER_ID` = account the
+bot is connected to; `ADMIN_USER_IDS` = may send `/twin` commands; `ALLOWED_USER_IDS` =
+exactly two partners. `Settings.require_bot/ingest/llm()` enforce these per command.
 
 ## Privacy rules for the public repo
-
 - Never commit `.env`, `deploy/hosts.yaml`, `data/` (except `data/README.md` and the
   counts-only `dataset_manifest.json`), weights, Chroma data, eval outputs, the style
   profile. No name, Telegram id, phone, city or contact anywhere in the repo, commit
