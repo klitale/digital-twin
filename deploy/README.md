@@ -7,7 +7,7 @@ Hosts and roles live in `deploy/hosts.yaml` (gitignored; template in
 | Role | What runs | Where |
 |---|---|---|
 | `bot` | `twin run` under systemd (`twin.service`), Chroma index, `data/state` | `/opt/twin`, system user `twin` |
-| `staging` | a second bot instance with `DRY_RUN=true` forced by the unit: prompt versions against live traffic, nothing is sent | `/opt/twin` |
+| `staging` | a second bot instance with `DRY_RUN=true` forced by the unit. **Needs its own bot token and its own Telegram account**: one token allows one long-polling consumer and one Business account allows one chatbot. Installed on srv-a but disabled until a second bot exists | `/opt/twin` |
 | `jobs` | index builds, evaluation runs, reports on demand through the CLI; no service, no sudo | `~/twin` |
 
 This workload does not need three machines; the split is for isolation and learning.
@@ -50,8 +50,11 @@ ssh <host> cat /opt/twin/data/state/connection.json   # business connection
 ssh <host> cat /opt/twin/data/state/bot_state.json    # switches, pauses, sent ids
 ```
 
-Memory: `systemctl show twin -p MemoryCurrent` (RSS measured at first deploy: see the
-Phase 5 report in the project history).
+Memory: `systemctl show twin -p MemoryCurrent`; measured at the first deploy (Chroma
+index of 6.2k pairs loaded, embeddings via the gateway): about 230 MB.
+
+Service control from the workstation: `deploy/service.sh <host> start|stop|restart|disable|enable`;
+`deploy/status.sh <host> [lines]` shows the unit, memory, Telegram reachability and the log tail.
 
 ## Rollback
 
