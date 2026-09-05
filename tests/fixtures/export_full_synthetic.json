@@ -1,0 +1,371 @@
+{
+ "about": "Here is all the data that you have shared with Telegram in your account. Synthetic fixture.",
+ "personal_information": {
+  "user_id": 1001,
+  "first_name": "Иван",
+  "last_name": "Петров",
+  "phone_number": "",
+  "username": "@ivan_sintetika",
+  "bio": "тестовый профиль"
+ },
+ "profile_pictures": [],
+ "contacts": {
+  "about": "If you allow access, your contacts are continuously synced with Telegram. Synthetic fixture.",
+  "list": [
+   {
+    "first_name": "Алексей",
+    "last_name": "Смирнов",
+    "phone_number": "",
+    "date": "2020-01-15T12:00:00",
+    "date_unixtime": "1579089600"
+   },
+   {
+    "first_name": "Дмитрий",
+    "last_name": "Козлов",
+    "phone_number": "",
+    "date": "2021-07-03T18:30:00",
+    "date_unixtime": "1625329800"
+   }
+  ]
+ },
+ "frequent_contacts": {
+  "about": "This rating is based on your interactions. Synthetic fixture.",
+  "list": [
+   {
+    "id": 1002,
+    "category": "people",
+    "type": "user",
+    "name": "Алексей Смирнов",
+    "rating": 12.5
+   },
+   {
+    "id": 1004,
+    "category": "people",
+    "type": "user",
+    "name": "Дмитрий Козлов",
+    "rating": 3.1
+   }
+  ]
+ },
+ "sessions": {
+  "about": "We store this to display your connected devices. Synthetic fixture.",
+  "list": []
+ },
+ "web_sessions": {
+  "about": "Synthetic fixture.",
+  "list": []
+ },
+ "other_data": {
+  "about_meta": "Synthetic fixture.",
+  "changes_log": [],
+  "help": "Synthetic fixture.",
+  "installed_stickers": [],
+  "ips": [],
+  "drafts": [],
+  "drafts_about": "Synthetic fixture."
+ },
+ "chats": {
+  "about": "This page lists all chats from this export.",
+  "list": [
+   {
+    "name": "Алексей Смирнов",
+    "type": "personal_chat",
+    "id": 1002,
+    "messages": [
+     {
+      "id": 1,
+      "type": "message",
+      "date": "2024-03-05T14:22:10",
+      "date_unixtime": "1709637730",
+      "from": "Иван Петров",
+      "from_id": "user1001",
+      "text": "Привет! Ты сегодня идёшь на тренировку?",
+      "text_entities": [
+       {
+        "type": "plain",
+        "text": "Привет! Ты сегодня идёшь на тренировку?"
+       }
+      ]
+     },
+     {
+      "id": 2,
+      "type": "message",
+      "date": "2024-03-05T14:23:41",
+      "date_unixtime": "1709637821",
+      "from": "Алексей Смирнов",
+      "from_id": "user1002",
+      "text": [
+       "Да, ",
+       {
+        "type": "bold",
+        "text": "обязательно"
+       },
+       " иду. Вот расписание: ",
+       {
+        "type": "link",
+        "text": "https://example.invalid/raspisanie"
+       }
+      ],
+      "text_entities": [
+       {
+        "type": "plain",
+        "text": "Да, "
+       },
+       {
+        "type": "bold",
+        "text": "обязательно"
+       },
+       {
+        "type": "plain",
+        "text": " иду. Вот расписание: "
+       },
+       {
+        "type": "link",
+        "text": "https://example.invalid/raspisanie"
+       }
+      ]
+     },
+     {
+      "id": 3,
+      "type": "service",
+      "date": "2024-03-05T15:00:02",
+      "date_unixtime": "1709640002",
+      "actor": "Алексей Смирнов",
+      "actor_id": "user1002",
+      "action": "phone_call",
+      "duration_seconds": 47,
+      "discard_reason": "hangup",
+      "text": "",
+      "text_entities": []
+     },
+     {
+      "id": 4,
+      "type": "message",
+      "date": "2024-03-05T15:05:30",
+      "date_unixtime": "1709640330",
+      "from": "Алексей Смирнов",
+      "from_id": "user1002",
+      "text": "",
+      "file": "(File not included. Change data exporting settings to download.)",
+      "thumbnail": "(File not included. Change data exporting settings to download.)",
+      "media_type": "sticker",
+      "sticker_emoji": "😂",
+      "width": 512,
+      "height": 512,
+      "text_entities": []
+     },
+     {
+      "id": 5,
+      "type": "message",
+      "date": "2024-03-05T15:10:00",
+      "date_unixtime": "1709640600",
+      "from": "Иван Петров",
+      "from_id": "user1001",
+      "text": "Смотри, какой закат на даче",
+      "photo": "(File not included. Change data exporting settings to download.)",
+      "photo_file_size": 245000,
+      "width": 1280,
+      "height": 960,
+      "text_entities": [
+       {
+        "type": "plain",
+        "text": "Смотри, какой закат на даче"
+       }
+      ]
+     },
+     {
+      "id": 6,
+      "type": "message",
+      "date": "2024-03-05T15:12:45",
+      "date_unixtime": "1709640765",
+      "from": "Алексей Смирнов",
+      "from_id": "user1002",
+      "text": [
+       "Красиво! ",
+       {
+        "type": "mention",
+        "text": "@ivan_sintetika"
+       },
+       " посмотри ещё ",
+       {
+        "type": "text_link",
+        "text": "здесь",
+        "href": "https://example.invalid/foto"
+       }
+      ],
+      "reply_to_message_id": 1,
+      "edited": "2024-03-05T15:13:10",
+      "edited_unixtime": "1709640790",
+      "text_entities": [
+       {
+        "type": "plain",
+        "text": "Красиво! "
+       },
+       {
+        "type": "mention",
+        "text": "@ivan_sintetika"
+       },
+       {
+        "type": "plain",
+        "text": " посмотри ещё "
+       },
+       {
+        "type": "text_link",
+        "text": "здесь",
+        "href": "https://example.invalid/foto"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "name": null,
+    "type": "personal_chat",
+    "id": 1003,
+    "messages": [
+     {
+      "id": 101,
+      "type": "message",
+      "date": "2023-11-20T09:01:00",
+      "date_unixtime": "1700470860",
+      "from": "Иван Петров",
+      "from_id": "user1001",
+      "text": "Ты получил документы?",
+      "text_entities": [
+       {
+        "type": "plain",
+        "text": "Ты получил документы?"
+       }
+      ]
+     },
+     {
+      "id": 102,
+      "type": "message",
+      "date": "2023-11-20T09:04:12",
+      "date_unixtime": "1700471052",
+      "from": null,
+      "from_id": "user1003",
+      "text": "Да, всё пришло, спасибо",
+      "text_entities": [
+       {
+        "type": "plain",
+        "text": "Да, всё пришло, спасибо"
+       }
+      ]
+     },
+     {
+      "id": 103,
+      "type": "message",
+      "date": "2023-11-20T09:05:00",
+      "date_unixtime": "1700471100",
+      "from": null,
+      "from_id": "user1003",
+      "text": "",
+      "file": "(File not included. Change data exporting settings to download.)",
+      "media_type": "voice_message",
+      "mime_type": "audio/ogg",
+      "duration_seconds": 12,
+      "text_entities": []
+     }
+    ]
+   },
+   {
+    "name": "Дача 2024",
+    "type": "private_group",
+    "id": 2001,
+    "messages": [
+     {
+      "id": 1,
+      "type": "message",
+      "date": "2024-05-01T10:00:00",
+      "date_unixtime": "1714557600",
+      "from": "Дмитрий Козлов",
+      "from_id": "user1004",
+      "text": "Кто едет в субботу?",
+      "text_entities": [
+       {
+        "type": "plain",
+        "text": "Кто едет в субботу?"
+       }
+      ]
+     },
+     {
+      "id": 2,
+      "type": "message",
+      "date": "2024-05-01T10:02:30",
+      "date_unixtime": "1714557750",
+      "from": "Иван Петров",
+      "from_id": "user1001",
+      "text": [
+       {
+        "type": "mention",
+        "text": "@dmitry_sintetika"
+       },
+       " я еду, возьму шашлык"
+      ],
+      "text_entities": [
+       {
+        "type": "mention",
+        "text": "@dmitry_sintetika"
+       },
+       {
+        "type": "plain",
+        "text": " я еду, возьму шашлык"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "name": "Погода Бот",
+    "type": "bot_chat",
+    "id": 3001,
+    "messages": [
+     {
+      "id": 1,
+      "type": "message",
+      "date": "2024-06-10T08:00:00",
+      "date_unixtime": "1718006400",
+      "from": "Иван Петров",
+      "from_id": "user1001",
+      "text": "/start",
+      "text_entities": [
+       {
+        "type": "plain",
+        "text": "/start"
+       }
+      ]
+     },
+     {
+      "id": 2,
+      "type": "message",
+      "date": "2024-06-10T08:00:01",
+      "date_unixtime": "1718006401",
+      "from": "Погода Бот",
+      "from_id": "user3001",
+      "text": "Привет! Отправь название города.",
+      "inline_bot_buttons": [
+       [
+        {
+         "type": "callback",
+         "text": "Москва",
+         "data": "city:msk"
+        }
+       ]
+      ],
+      "text_entities": [
+       {
+        "type": "plain",
+        "text": "Привет! Отправь название города."
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ "left_chats": {
+  "about": "This page lists all chats that you have left.",
+  "list": []
+ }
+}

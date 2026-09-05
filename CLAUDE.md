@@ -22,8 +22,8 @@ Educational portfolio project; the repository is public and must contain no pers
 | # | Phase | Status |
 |---|---|---|
 | 0 | Bootstrap (this skeleton) | done |
-| 1 | Export parsing → `messages.jsonl` | next |
-| 2 | Pairs, time-based split, profiling report | |
+| 1 | Export parsing → `messages.jsonl` | done |
+| 2 | Pairs, time-based split, profiling report | next |
 | 3 | Style profile | |
 | 4 | Index, retrieval, prompt, RAG backend, `twin chat` | |
 | 5 | Business bot + VPS inventory/deploy | |
@@ -41,7 +41,9 @@ no userbot, no local model serving.
 
 ```
 src/twin/  config.py (Settings, require_*), cli.py, logsetup.py
-           ingest/ core/ bot/ eval/            # added phase by phase
+           core/schemas.py (Message, manifests, DropReason)
+           ingest/parse_export.py (pure parser), pipeline.py (twin ingest), stats.py (5.4)
+           bot/ eval/                          # added phase by phase
 scripts/privacy_check.py   tests/ (synthetic fixtures only)   prompts/ configs/
 training/ serving/ deploy/ docs/   data/ (gitignored except README and manifest)
 ```

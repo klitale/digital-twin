@@ -50,8 +50,18 @@ def ingest(
         typer.Option("--export", help="Telegram export result.json (default: RAW_EXPORT_PATH)."),
     ] = None,
 ) -> None:
-    """Parse the Telegram export and build the pair dataset with a time-based split."""
-    _not_yet("ingest", 1)
+    """Parse the Telegram export into messages.jsonl (pairs and split arrive in Phase 2)."""
+    from twin.config import ConfigError, load_settings
+    from twin.ingest.parse_export import ExportFormatError
+    from twin.ingest.pipeline import format_report, run_parse
+
+    settings = load_settings()
+    try:
+        report = run_parse(settings, export)
+    except (ConfigError, ExportFormatError) as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(format_report(report))
 
 
 @app.command("analyze-data")
