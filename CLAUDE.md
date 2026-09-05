@@ -1,9 +1,8 @@
 # digital-twin — CLAUDE.md
 
 Telegram Business bot that replies from a connected account in the writing style of one
-person from a Telegram export. Three generation modes behind one interface (RAG,
-fine-tuned LoRA on Modal, hybrid) and one evaluation harness with a blind LLM judge.
-Educational portfolio project; the repository is public and must contain no personal data.
+person from a Telegram export: RAG, fine-tuned LoRA on Modal and hybrid modes behind one
+interface, one evaluation harness with a blind judge. Public portfolio repo: no personal data.
 ## Process (non-negotiable)
 - Work one phase at a time (table below). Before a phase: state goal, files, acceptance.
   After: `uv run pytest`, `uv run ruff check .`, phase checks, commit, report with
