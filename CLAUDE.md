@@ -31,10 +31,9 @@ Educational portfolio project; the repository is public and must contain no pers
 | 9 | Real fine-tune and three-mode comparison | |
 
 ## Stack and layout
-Python 3.11, `uv`, `ruff`, `pytest`, `typer`, `pydantic-settings`, `structlog`,
-`aiogram` 3 (Business updates, long polling), `openai` SDK against OpenAI-compatible
-gateways, ChromaDB, Unsloth + TRL on Modal GPU, vLLM on Modal. No Docker, no webhook,
-no userbot, no local model serving.
+Python 3.11, `uv`, `ruff`, `pytest`, `typer`, `pydantic-settings`, `structlog`, `aiogram` 3
+(Business updates, long polling), `openai` SDK, ChromaDB, Unsloth + TRL and vLLM on Modal.
+No Docker, no webhook, no userbot, no local model serving.
 
 ```
 src/twin/  config.py (Settings, require_*), cli.py, logsetup.py
@@ -52,9 +51,8 @@ deploy/    inventory.sh, push.sh (rsync + install), install.sh <role>, sync_inde
            dataconfig.py (configs/data/*.yaml), pipeline.py (twin ingest), stats.py (5.4),
            style_profile.py (twin style-profile: 300 train replies + stats -> Russian rules)
            bot/ eval/                          # added phase by phase
-scripts/privacy_check.py   tests/ (synthetic fixtures, fake_openai_server.py)
-prompts/<name>_v<N>.md   configs/data/default.yaml (min_date 2021, 15% tail)
-training/ serving/ deploy/ docs/   data/ (gitignored except README and manifest)
+scripts/privacy_check.py  tests/ (synthetic fixtures, fake_openai_server.py)
+prompts/<name>_v<N>.md  configs/data/default.yaml (min_date 2021, 15% tail)  training/ serving/
 ```
 
 ## Conventions
@@ -70,8 +68,8 @@ training/ serving/ deploy/ docs/   data/ (gitignored except README and manifest)
 - Every generated reply is one structlog record (chat_id, message_id, mode, model,
   prompt_version, retrieved_example_ids, params, latency, response, dry_run). Never log
   tokens, keys or full business-connection payloads (`logsetup` redacts).
-- Tests need no real credentials or paid APIs (`tests/fake_openai_server.py`, temporary
-  Chroma); they run in an empty cwd (`conftest.py`), so `.env` is never read by accident.
+- Tests need no credentials or paid APIs (fake server, temporary Chroma) and run in an
+  empty cwd, so `.env` is never read by accident.
 - Gateway facts (Phase 4): embeddings batches over ~10 texts return 503
   (`EMBED_BATCH_SIZE=10`, parallel workers); Qwen 3.5 Flash honours
   `enable_thinking=false` (default generator), DeepSeek V4 Flash keeps reasoning on,
@@ -83,8 +81,7 @@ training/ serving/ deploy/ docs/   data/ (gitignored except README and manifest)
   no sudo, CLI only), staging = srv-a installed but **disabled**: one bot token allows one
   polling instance and one Business account allows one chatbot, so staging needs its own
   bot + account. Deploy path today: `deploy/push.sh` (rsync); `git pull` once on GitHub.
-- The bot starts in `DRY_RUN` from `.env` (true) and idles until a business connection
-  arrives; `/twin dryrun off` or `.env` + restart switches to live replies.
+- The bot starts with `DRY_RUN` from `.env` and idles until a business connection arrives.
 
 ## Telegram identities (three different accounts in this deployment)
 
