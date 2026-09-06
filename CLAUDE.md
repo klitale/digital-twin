@@ -24,9 +24,9 @@ interface, one evaluation harness with a blind judge. Public portfolio repo: no 
 | 4 | Index, retrieval, prompt, RAG backend, `twin chat` | done |
 | 5 | Business bot + VPS inventory/deploy | done |
 | 6 | Fine-tuning pipeline + Modal serving + backends | done |
-| 7 | Eval harness, judge, compare, HTML report | in progress |
-| 8 | Project skills, README | |
-| 9 | Real fine-tune and three-mode comparison | |
+| 7 | Eval harness, judge, compare, HTML report | done |
+| 8 | Project skills, README | done |
+| 9 | Real fine-tune and three-mode comparison | in progress |
 
 ## Stack and layout
 Python 3.11, `uv`, `ruff`, `pytest`, `typer`, `pydantic-settings`, `structlog`, `aiogram` 3
@@ -34,7 +34,8 @@ Python 3.11, `uv`, `ruff`, `pytest`, `typer`, `pydantic-settings`, `structlog`, 
 No Docker, no webhook, no userbot, no local model serving.
 
 ```
-src/twin/  config.py (Settings, require_*), cli.py, logsetup.py
+src/twin/  config.py (Settings, require_*), cli.py, logsetup.py; eval/ (harness with
+           leakage asserts, judge, compare, report)
            core/schemas.py (contracts), llm_client.py (one OpenAI-compatible client,
            reasoning off per model family), prompts.py (versioned prompts/*.md templates),
            embeddings.py, vector_store.py (Chroma + index manifest), retriever.py (filters,

@@ -306,6 +306,9 @@ def train(
     prepare_only: Annotated[
         bool, typer.Option("--prepare-only", help="Only build data/train/train.jsonl.")
     ] = False,
+    detach: Annotated[
+        bool, typer.Option("--detach", help="With --remote: spawn and print the call id.")
+    ] = False,
 ) -> None:
     """Prepare train.jsonl from the training pairs and run LoRA fine-tuning."""
     import os
@@ -359,6 +362,7 @@ def train(
         cmd = [
             "modal",
             "run",
+            *(["--detach"] if detach else []),
             "training/train_modal.py",
             "--config",
             str(config),
@@ -367,6 +371,8 @@ def train(
         ]
         if dry_run:
             cmd.append("--dry-run")
+        if detach:
+            cmd.append("--detach")
         typer.echo("launching: " + " ".join(cmd), err=True)
         raise typer.Exit(code=subprocess.call(cmd, env=env))
 

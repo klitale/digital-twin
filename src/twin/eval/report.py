@@ -16,6 +16,13 @@ from twin.eval.compare import Comparison, compare_runs
 from twin.eval.schemas import CRITERIA, EvalRecord, EvalRun
 
 WORST = 10
+MAX_RETRIEVED_SHOWN = 5
+CRITERION_LEGEND = {
+    "style_similarity": "стиль — длина, лексика, пунктуация, эмодзи как у эталона",
+    "appropriateness": "уместность — ответ по месту в разговоре",
+    "not_assistant_like": "не ассистент — без вежливых формул и объяснений",
+    "consistency": "непротиворечивость — не спорит с фактами из контекста и эталона",
+}
 CRITERION_LABELS = {
     "style_similarity": "стиль",
     "appropriateness": "уместность",
@@ -28,7 +35,7 @@ CSS = """
   --bg: light-dark(#fbfaf7, #14161a); --fg: light-dark(#1e2126, #e6e4de);
   --muted: light-dark(#5f6672, #9aa2ad); --line: light-dark(#dcd8ce, #2c3138);
   --card: light-dark(#ffffff, #1b1e24); --accent: light-dark(#2f6fde, #7fa8ff);
-  --bar: light-dark(#c9d8f5, #2a3d66); --good: light-dark(#2e8b57, #6fcf97);
+  --bar: light-dark(#a9c1ef, #5b7fcf); --good: light-dark(#2e8b57, #6fcf97);
   --bad: light-dark(#c0392b, #ff8a80); }
 * { box-sizing: border-box; }
 body { margin: 0; padding: 2rem clamp(1rem, 4vw, 3rem); background: var(--bg); color: var(--fg);
@@ -38,19 +45,25 @@ h3 { font-size: 1rem; margin: 1.25rem 0 .5rem; color: var(--muted); font-weight:
 .meta { color: var(--muted); font-size: .9rem; }
 .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: .5rem; background: var(--card); }
 table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
-th, td { padding: .45rem .7rem; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
-th { color: var(--muted); font-weight: 600; font-size: .85rem; }
+th, td { padding: .45rem .6rem; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; font-size: .92rem; }
+th { color: var(--muted); font-weight: 600; font-size: .8rem; white-space: normal; vertical-align: bottom; }
+td.wrap { white-space: normal; min-width: 11rem; }
+td small { color: var(--muted); display: block; font-size: .8rem; }
+.scroll { scrollbar-width: thin; }
+.legend { columns: 2; column-gap: 2rem; font-size: .9rem; color: var(--muted); margin: .25rem 0 0; padding-left: 1.1rem; }
 tr:last-child td { border-bottom: 0; }
 .delta-pos { color: var(--good); } .delta-neg { color: var(--bad); }
 .dist { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: .75rem; }
 .dist figure { margin: 0; padding: .75rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--card); }
 .dist figcaption { font-size: .85rem; color: var(--muted); margin-bottom: .4rem; }
 .bar { display: grid; grid-template-columns: 1.2rem 1fr 2.5rem; align-items: center; gap: .4rem; font-size: .85rem; }
-.bar i { display: block; height: .7rem; background: var(--bar); border-radius: .2rem; min-width: 2px; }
+.bar i { display: block; height: .7rem; background: var(--bar); border-radius: .2rem; }
+.bar i.zero { background: transparent; }
 .examples { content-visibility: auto; contain-intrinsic-size: auto 40rem; }
 details { border: 1px solid var(--line); border-radius: .5rem; background: var(--card); margin: .5rem 0; }
-summary { cursor: pointer; padding: .6rem .8rem; font-weight: 600; }
-summary .score { color: var(--muted); font-weight: 400; margin-left: .5rem; }
+summary { cursor: pointer; padding: .6rem .8rem; }
+summary .score { font-weight: 700; }
+summary .id { color: var(--muted); font-size: .85rem; margin-left: .5rem; }
 details > div { padding: 0 .8rem .8rem; }
 pre { white-space: pre-wrap; word-break: break-word; margin: .25rem 0 .75rem; padding: .6rem .7rem;
   border-radius: .4rem; background: var(--bg); border: 1px solid var(--line); font: .9rem/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
@@ -68,6 +81,13 @@ def _fmt(value: object) -> str:
     if isinstance(value, float):
         return f"{value:.2f}"
     return str(value)
+
+
+def run_label(run: EvalRun) -> str:
+    """Human label: mode · model tail · start time; the run id stays in the metadata."""
+    model = run.metadata.model.split("/")[-1]
+    started = run.metadata.started_at[:16].replace("T", " ")
+    return f"{run.metadata.mode} · {model} · {started}"
 
 
 def _delta_cell(value: object) -> str:
@@ -122,20 +142,22 @@ def distributions(runs: Sequence[EvalRun]) -> str:
             counts = Counter(r.judge.scores[criterion] for r in judged)  # type: ignore[union-attr]
             total = max(1, sum(counts.values()))
             bars = "".join(
-                f'<div class="bar"><span>{score}</span><i style="width:{100 * counts.get(score, 0) / total:.0f}%"></i>'
+                f'<div class="bar"><span>{score}</span>'
+                f'<i class="{"zero" if not counts.get(score) else ""}" style="width:{100 * counts.get(score, 0) / total:.0f}%"></i>'
                 f"<span>{counts.get(score, 0)}</span></div>"
                 for score in (5, 4, 3, 2, 1)
             )
             figures.append(
-                f"<figure><figcaption>{_esc(run.metadata.mode)} · {_esc(CRITERION_LABELS[criterion])}</figcaption>{bars}</figure>"
+                f"<figure><figcaption>{_esc(run.metadata.mode)} · {_esc(CRITERION_LABELS[criterion])} · n={len(judged)}</figcaption>{bars}</figure>"
             )
     return f'<div class="dist">{"".join(figures)}</div>'
 
 
-def per_period_table(comparison: Comparison) -> str:
+def per_period_table(comparison: Comparison, runs: Sequence[EvalRun]) -> str:
     periods = sorted({p for table in comparison.per_period.values() for p in table})
     head = "".join(f"<th>{_esc(p)}</th>" for p in periods)
     rows = []
+    labels = {run.metadata.run_id: run_label(run) for run in runs}
     for label, table in comparison.per_period.items():
         cells = []
         for period in periods:
@@ -145,8 +167,10 @@ def per_period_table(comparison: Comparison) -> str:
                 cells.append(f"<td>{mean:.2f} <span class='meta'>n={int(entry['n'])}</span></td>")
             else:
                 cells.append("<td></td>")
-        rows.append(f"<tr><td>{_esc(label)}</td>{''.join(cells)}</tr>")
-    return f'<div class="scroll"><table><thead><tr><th>run</th>{head}</tr></thead><tbody>{"".join(rows)}</tbody></table></div>'
+        rows.append(
+            f'<tr><td class="wrap">{_esc(labels.get(label, label))}</td>{"".join(cells)}</tr>'
+        )
+    return f'<div class="scroll"><table><thead><tr><th>прогон</th>{head}</tr></thead><tbody>{"".join(rows)}</tbody></table></div>'
 
 
 def _turns(record: EvalRecord, name: str) -> str:
@@ -180,8 +204,8 @@ def example_block(record: EvalRecord, name: str) -> str:
     if record.rejected:
         extra.append("rejected: " + ", ".join(record.rejected))
     summary = (
-        f"{_esc(record.pair_id)} · {_esc(record.period)}"
-        f'<span class="score">score {_fmt(mean)} · {_esc(record.latency_ms)} ms'
+        f'<span class="score">{_fmt(mean)}</span> из 5'
+        f'<span class="id">{_esc(record.period)} · {_esc(record.pair_id)} · {_esc(record.latency_ms)} ms'
         f"{' · ' + _esc('; '.join(extra)) if extra else ''}</span>"
     )
     return (
@@ -210,6 +234,7 @@ def render_report(runs: Sequence[EvalRun], name: str, baseline_mode: str = "rag"
         f"eval config v{_esc(r.metadata.eval_config_version)}, sample {_esc(r.metadata.holdout_ids_sha256)}"
         for r in runs
     ]
+    legend = "".join(f"<li>{_esc(text)}</li>" for text in CRITERION_LEGEND.values())
     worst_sections = "".join(
         f"<h3>{_esc(r.metadata.mode)} · {_esc(r.metadata.model)}</h3>{worst_examples(r, name)}"
         for r in runs
@@ -228,12 +253,13 @@ def render_report(runs: Sequence[EvalRun], name: str, baseline_mode: str = "rag"
 <p class="meta">сгенерировано {generated}; baseline {_esc(comparison.baseline)}; шкала 1–5, выше лучше</p>
 <h2>Сводка</h2>
 {summary_table(comparison)}
+<ul class="legend">{legend}</ul>
 <h2>Caveats</h2>
 <ul class="caveats">{"".join(f"<li>{_esc(c)}</li>" for c in comparison.caveats)}</ul>
 <h2>Распределение оценок</h2>
 {distributions(runs)}
 <h2>По периодам</h2>
-{per_period_table(comparison)}
+{per_period_table(comparison, runs)}
 <h2>Худшие {WORST} примеров на режим</h2>
 <div class="examples">{worst_sections}</div>
 <h2>Метаданные прогонов</h2>

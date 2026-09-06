@@ -89,12 +89,28 @@ def main(
     dataset: str = "data/train/train.jsonl",
     dry_run: bool = False,
     list_only: bool = False,
+    detach: bool = False,
+    result: str = "",
 ) -> None:
+    """``--detach`` spawns the job and prints its call id; ``--result <id>`` fetches it later."""
     if list_only:
         print(json.dumps(list_adapters.remote(), indent=2))
+        return
+    if result:
+        call = modal.FunctionCall.from_id(result)
+        try:
+            summary = call.get(timeout=0)
+        except TimeoutError:
+            print(json.dumps({"call_id": result, "status": "running"}))
+            return
+        print(json.dumps({k: v for k, v in summary.items() if k != "loss_history"}, indent=2))
         return
     config_yaml = Path(config).read_text(encoding="utf-8")
     manifest_path = Path(dataset).with_name("train_manifest.json")
     manifest_json = manifest_path.read_text(encoding="utf-8") if manifest_path.exists() else "{}"
+    if detach:
+        call = train_remote.spawn(config_yaml, Path(dataset).read_bytes(), manifest_json, dry_run)
+        print(json.dumps({"call_id": call.object_id, "status": "spawned"}))
+        return
     summary = train_remote.remote(config_yaml, Path(dataset).read_bytes(), manifest_json, dry_run)
     print(json.dumps({k: v for k, v in summary.items() if k != "loss_history"}, indent=2))
