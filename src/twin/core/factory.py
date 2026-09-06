@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+
 from twin.config import ConfigError, Mode, Settings
 from twin.core.backends import (
     FallbackBackend,
@@ -127,3 +129,11 @@ def build_initiative_backend(settings: Settings) -> InitiativeBackend:
         temperature=settings.generation_temperature,
         max_reply_chars=min(settings.max_reply_chars, 300),
     )
+
+
+def style_profile_digest(settings: Settings) -> str | None:
+    """Fingerprint of the style profile: it shapes every prompt but is gitignored."""
+    path = settings.processed_dir / STYLE_PROFILE_FILE
+    if not path.is_file():
+        return None
+    return hashlib.sha256(path.read_bytes()).hexdigest()[:12]

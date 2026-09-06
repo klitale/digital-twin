@@ -38,6 +38,16 @@ def compare_runs(runs: Sequence[EvalRun], baseline_mode: str = "rag") -> Compari
     judges = {(r.metadata.judge_model, r.metadata.judge_prompt_version) for r in ordered}
     if len(judges) > 1:
         caveats.append("runs used different judge models or rubrics")
+    by_prompt: dict[str, set[str]] = {}
+    for run in runs:
+        digest = run.metadata.style_profile_sha256
+        by_prompt.setdefault(run.metadata.prompt_version, set()).add(digest or "untracked")
+    for prompt, digests in by_prompt.items():
+        if len(digests) > 1:
+            caveats.append(
+                f"{prompt}: runs used different style profiles, so the prompt version "
+                "alone does not explain the difference"
+            )
     rows: list[dict[str, object]] = []
     for run in ordered:
         s = run.summary

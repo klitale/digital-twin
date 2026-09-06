@@ -441,7 +441,7 @@ def eval_(
 ) -> None:
     """Generate and judge every holdout pair for one mode; writes data/eval/<run>.json."""
     from twin.config import ConfigError, load_settings
-    from twin.core.factory import build_backend, build_retriever
+    from twin.core.factory import build_backend, build_retriever, style_profile_digest
     from twin.core.llm_client import LLMClient, LLMError
     from twin.core.prompts import PromptError, load_prompt
     from twin.core.vector_store import IndexMismatchError
@@ -501,6 +501,7 @@ def eval_(
             eval_config,
             manifest.dataset_version,
             manifest.messages_dataset_version,
+            style_profile_sha256=style_profile_digest(settings),
             progress=progress,
         )
         typer.echo("", err=True)

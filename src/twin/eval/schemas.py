@@ -66,6 +66,11 @@ class RunMetadata(BaseModel):
     eval_config: dict[str, Any]
     eval_config_version: int
     holdout_ids_sha256: str = Field(description="identity of the evaluated sample")
+    style_profile_sha256: str | None = Field(
+        default=None,
+        description="identity of the style profile, which is part of the prompt but is "
+        "gitignored personal data; None for runs recorded before it was tracked",
+    )
     n: int
 
 

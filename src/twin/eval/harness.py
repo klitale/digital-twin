@@ -161,6 +161,7 @@ def run_eval(
     config: EvalConfig,
     dataset_version: str,
     messages_dataset_version: str,
+    style_profile_sha256: str | None = None,
     progress: Callable[[int, int], None] | None = None,
 ) -> EvalRun:
     started = datetime.now(tz=UTC)
@@ -233,6 +234,7 @@ def run_eval(
         mode=backend.mode if len(modes) == 1 else "+".join(sorted(modes)),
         model="+".join(sorted(models)),
         prompt_version="+".join(sorted(prompt_versions)),
+        style_profile_sha256=style_profile_sha256,
         judge_model=judge.llm.model,
         judge_prompt_version=judge.prompt_version,
         eval_config=config.model_dump(),

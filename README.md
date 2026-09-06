@@ -78,11 +78,24 @@ Scores are 1-5 per criterion; run-to-run noise on this sample is about ±0.1, so
 are real. `rag_v2` replaced a length rule that said "a few words, rarely more" with the
 measured distribution and a line-break rule; it gained 0.15 overall, almost all of it in
 consistency (+0.38) and appropriateness (+0.25). It did *not* fix the length itself: the
-twin still never writes a long message (see below). A measured gap that no prompt has closed yet: over 80 replies the longest the bot writes
-is 77 characters, while 6% of the real replies pass 100 and the longest passes 1000, and
-it splits a reply into 2.3 messages where the real person splits into 1.6. The retrieved
-examples (median reply 33 characters) and the style profile's own "typical reply is 1-6
-words" anchor it far more strongly than an instruction does.
+twin still never writes a long message (see below). Length was the one thing `rag_v2` failed to move, and the fix turned out to live in the
+style profile rather than in the prompt. Instructions lose to the anchors: eight
+retrieved examples with a median reply of 33 characters, and the profile's own "a typical
+reply is 1-6 words". Restating the measured tail in the profile itself (one reply in ten
+over 90 characters, one in thirty over 150, and what he is doing when he writes long)
+moved the distribution without moving the score:
+
+| p50 | p75 | p90 | max | over 100 chars | messages per reply |
+|---|---|---|---|---|---|
+| 29 / 31 / **40** / *36* | 42 / 46 / **56** / *60* | 51 / 57 / **66** / *90* | 77 / 77 / **111** / *237* | 0% / 0% / **1.2%** / *6.2%* | 2.20 / 2.30 / **2.04** / *1.57* |
+
+Reading: `rag_v1` / `rag_v2` / **`rag_v2` + length-aware profile** / *the real replies*.
+The judge scores those three 3.22, 3.38 and 3.34, so the last step is free within noise
+while the shape of the output gets closer to the person. The remaining gap is the far
+tail: he still writes the occasional several-hundred-character message and the twin does
+not. Because the profile is gitignored personal data, every run now records its
+`style_profile_sha256` and `twin compare` says when two runs share a prompt version but
+not a profile.
 
 What the records show: the adapter reproduces the twin's *form* well (median
 reply length 36 chars against 37 in the references, short lines, no assistant tone),
