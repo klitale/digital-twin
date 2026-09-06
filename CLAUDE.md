@@ -10,8 +10,8 @@ interface, one evaluation harness with a blind judge. Public portfolio repo: no 
 - Never hide failing tests, data anomalies or unsupported assumptions.
 - Decisions on architecture, data validity, eval correctness or Telegram safety go into
   the phase report, never into a silent default.
-- `/systematic-debugging` before changing code on any failure; `/analyze` checklist before
-  dataset or eval numbers; `/modern-web-guidance` before HTML, `/design-critique` after.
+- `/systematic-debugging` before fixing failures; `/analyze` before quoting numbers;
+  `/modern-web-guidance` before HTML, `/design-critique` after.
 - Push only on explicit command; before the first push: `gitleaks detect` over the full
   history and a blocklist grep over all commits.
 

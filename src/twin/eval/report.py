@@ -99,29 +99,27 @@ def _delta_cell(value: object) -> str:
 
 def summary_table(comparison: Comparison) -> str:
     head = [
-        "run",
-        "mode",
-        "model",
-        "prompt",
+        "прогон",
         "n",
-        "silent",
-        "overall",
+        "молчал",
+        "overall (Δ к baseline)",
         *[CRITERION_LABELS[c] for c in CRITERIA],
-        "Δ overall",
         "latency p50",
     ]
     rows = []
     for row in comparison.rows:
+        delta = row.get("delta_overall")
+        delta_html = ""
+        if delta is not None:
+            cls = "delta-pos" if float(delta) > 0 else "delta-neg" if float(delta) < 0 else ""
+            delta_html = f' <span class="{cls}">{float(delta):+.2f}</span>'
         cells = [
-            f"<td>{_esc(row['run'])}</td>",
-            f"<td>{_esc(row['mode'])}</td>",
-            f"<td>{_esc(row['model'])}</td>",
-            f"<td>{_esc(row['prompt'])}</td>",
+            f'<td class="wrap"><strong>{_esc(row["mode"])}</strong> · {_esc(row["model"])}'
+            f"<small>{_esc(row['prompt'])} · {_esc(row['run'])}</small></td>",
             f"<td>{_esc(row['n'])}</td>",
             f"<td>{_esc(row['silent'])}</td>",
-            f"<td><strong>{_fmt(row['overall'])}</strong></td>",
+            f"<td><strong>{_fmt(row['overall'])}</strong>{delta_html}</td>",
             *[f"<td>{_fmt(row.get(c))}</td>" for c in CRITERIA],
-            _delta_cell(row.get("delta_overall")),
             f"<td>{_esc(row['latency_p50_ms'])} ms</td>",
         ]
         rows.append("<tr>" + "".join(cells) + "</tr>")
@@ -190,13 +188,11 @@ def example_block(record: EvalRecord, name: str) -> str:
         if judge and judge.scores
         else (judge.error if judge else "не оценено")
     )
-    retrieved = (
-        "\n\n".join(
-            f"[{r.pair_id}] Собеседник: {r.last_partner_text}\n{name}: {r.reply}"
-            for r in record.retrieved
-        )
-        or "(нет)"
-    )
+    shown = record.retrieved[:MAX_RETRIEVED_SHOWN]
+    retrieved = "\n\n".join(f"Собеседник: {r.last_partner_text}\n{name}: {r.reply}" for r in shown)
+    retrieved = retrieved or "(нет)"
+    if len(record.retrieved) > len(shown):
+        retrieved += f"\n\n… ещё {len(record.retrieved) - len(shown)}"
     output = record.output if record.output is not None else "(молчание)"
     extra = []
     if record.fallback_from:
