@@ -69,12 +69,22 @@ the git commit, so any number in `data/eval/report.html` is reproducible.
 
 | mode | overall | style | appropriateness | not assistant-like | consistency | p50 latency |
 |---|---|---|---|---|---|---|
-| `rag` (Qwen 3.5 Flash via gateway) | **3.22** | 2.50 | 3.00 | 4.60 | 2.79 | 1.25 s |
+| `rag`, prompt `rag_v2` (in production) | **3.38** | 2.54 | 3.25 | 4.55 | 3.16 | 1.48 s |
+| `rag`, prompt `rag_v1` | 3.22 | 2.50 | 3.00 | 4.60 | 2.79 | 1.25 s |
 | `finetuned` (Qwen 2.5 7B + LoRA, 2 epochs, loss 3.3 -> 2.44) | 2.83 | 2.05 | 2.51 | 4.34 | 2.43 | 1.06 s |
 | `hybrid` (the adapter + top-8 examples) | 2.73 | 1.95 | 2.43 | 4.19 | 2.38 | 1.12 s |
 
 Scores are 1-5 per criterion; run-to-run noise on this sample is about ±0.1, so the gaps
-are real. What the records show: the adapter reproduces the twin's *form* well (median
+are real. `rag_v2` replaced a length rule that said "a few words, rarely more" with the
+measured distribution and a line-break rule; it gained 0.15 overall, almost all of it in
+consistency (+0.38) and appropriateness (+0.25). It did *not* fix the length itself: the
+twin still never writes a long message (see below). A measured gap that no prompt has closed yet: over 80 replies the longest the bot writes
+is 77 characters, while 6% of the real replies pass 100 and the longest passes 1000, and
+it splits a reply into 2.3 messages where the real person splits into 1.6. The retrieved
+examples (median reply 33 characters) and the style profile's own "typical reply is 1-6
+words" anchor it far more strongly than an instruction does.
+
+What the records show: the adapter reproduces the twin's *form* well (median
 reply length 36 chars against 37 in the references, short lines, no assistant tone),
 but a 7B model loses to the much larger gateway model on picking the right thing to say.
 Hybrid is the worst of the three: with only a short prompt the 7B model tends to
