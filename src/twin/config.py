@@ -21,6 +21,8 @@ from typing import Annotated
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+MAX_ALLOWED_USERS = 3  # small, explicit allowlist: the bot writes to nobody else
+
 
 class ConfigError(ValueError):
     """A command's prerequisites are missing from the configuration."""
@@ -192,8 +194,12 @@ class Settings(BaseSettings):
             raise ConfigError("TG_BOT_TOKEN is not set")
         if self.business_owner_id is None:
             raise ConfigError("BUSINESS_OWNER_ID is not set")
-        if len(set(self.allowed_user_ids)) != 2:
-            raise ConfigError("ALLOWED_USER_IDS must contain exactly two distinct user ids")
+        distinct = len(set(self.allowed_user_ids))
+        if not 1 <= distinct <= MAX_ALLOWED_USERS:
+            raise ConfigError(
+                f"ALLOWED_USER_IDS must list 1 to {MAX_ALLOWED_USERS} distinct user ids "
+                f"(got {distinct}); the allowlist is the main Telegram safety gate"
+            )
         if not self.admin_user_ids:
             raise ConfigError("ADMIN_USER_IDS is empty: nobody could control the bot")
 

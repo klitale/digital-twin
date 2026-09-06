@@ -84,7 +84,7 @@ bot and account. Deploy path today `deploy/push.sh` (rsync); `git pull` once on 
 ## Telegram identities (three different accounts here)
 `TWIN_SENDER_ID` = whose export messages are the replies; `BUSINESS_OWNER_ID` = account the
 bot is connected to; `ADMIN_USER_IDS` = may send `/twin` commands; `ALLOWED_USER_IDS` =
-exactly two partners. `Settings.require_bot/ingest/llm()` enforce these per command.
+1-3 partners (`MAX_ALLOWED_USERS`). `Settings.require_bot/ingest/llm()` enforce these per command.
 
 ## Privacy rules for the public repo
 - Never commit `.env`, `deploy/hosts.yaml`, `data/` (except `data/README.md` and the

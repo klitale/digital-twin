@@ -1,8 +1,8 @@
 # digital-twin
 
 A Telegram bot that answers *as one person would*: connected to a Telegram account
-through Telegram Business → Chatbots, it replies to exactly two allowlisted people in
-that person's writing style, learned from a Telegram Desktop export.
+through Telegram Business → Chatbots, it replies to a short allowlist of people (at most
+three) in that person's writing style, learned from a Telegram Desktop export.
 
 Three generation modes sit behind one interface and are compared on the same holdout
 with the same blind LLM judge:
@@ -86,10 +86,10 @@ most replies in this chat are one-line reactions that no model can predict exact
 ## Telegram safety
 
 The bot fails closed: it replies only through a verified business connection whose
-owner matches `BUSINESS_OWNER_ID`, only in private chats with the two
-`ALLOWED_USER_IDS`, only when enabled and not paused, and only when the generated reply
+owner matches `BUSINESS_OWNER_ID`, only in private chats with the
+`ALLOWED_USER_IDS` (one to three of them), only when enabled and not paused, and only when the generated reply
 passes validation (no empty, over-long or assistant-sounding text). Restrict the
-Telegram-side *Selected chats* to the same two users as a second line of defence.
+Telegram-side *Selected chats* to the same users as a second line of defence.
 Control commands work only in the direct chat with the bot and only from
 `ADMIN_USER_IDS`; they are listed in Telegram's command menu (`/help`):
 

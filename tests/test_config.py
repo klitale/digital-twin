@@ -66,15 +66,16 @@ def test_require_ingest_needs_sender_id() -> None:
     make(twin_sender_id=1001).require_ingest()
 
 
-def test_require_bot_needs_exactly_two_distinct_allowed_users() -> None:
+def test_require_bot_bounds_the_allowlist() -> None:
     base = {"tg_bot_token": "1:abc", "business_owner_id": 1, "admin_user_ids": "1"}
-    with pytest.raises(ConfigError, match="exactly two"):
-        make(allowed_user_ids="1001", **base).require_bot()
-    with pytest.raises(ConfigError, match="exactly two"):
-        make(allowed_user_ids="1001,1001", **base).require_bot()
-    with pytest.raises(ConfigError, match="exactly two"):
-        make(allowed_user_ids="1001,1002,1003", **base).require_bot()
+    with pytest.raises(ConfigError, match="1 to 3 distinct"):
+        make(allowed_user_ids="", **base).require_bot()
+    with pytest.raises(ConfigError, match="1 to 3 distinct"):
+        make(allowed_user_ids="1001,1002,1003,1004", **base).require_bot()
+    make(allowed_user_ids="1001", **base).require_bot()
+    make(allowed_user_ids="1001,1001", **base).require_bot()  # duplicates collapse
     make(allowed_user_ids="1001,1002", **base).require_bot()
+    make(allowed_user_ids="1001,1002,1003", **base).require_bot()
 
 
 def test_require_bot_reports_missing_token_and_owner() -> None:
