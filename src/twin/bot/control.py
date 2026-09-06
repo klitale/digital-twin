@@ -18,6 +18,9 @@ from twin.bot.state import BotState, BusinessConnectionRecord
 from twin.config import Mode
 from twin.core.memory import ConversationMemory
 
+# every on|off switch, in the order the command list shows them
+SWITCHES = (*FEATURES, "learn")
+
 # (command, description shown in Telegram's menu). User-facing, hence Russian.
 COMMANDS: list[tuple[str, str]] = [
     ("status", "Состояние: связь, режим, dry-run, паузы, инициатива"),
@@ -30,6 +33,9 @@ COMMANDS: list[tuple[str, str]] = [
     ("followup", "on|off — дожимать, если собеседник замолчал после ответа"),
     ("opener", "on|off — иногда писать первым после долгой тишины"),
     ("aggro", "low|normal|high — насколько бот наваливает"),
+    ("learn", "on|off — запоминать факты из живой переписки"),
+    ("facts", "<user_id> — показать, что бот запомнил про собеседника"),
+    ("forget", "<user_id> — стереть запомненные факты"),
     ("poke", "<user_id> [followup|opener] — написать собеседнику сейчас"),
     ("help", "Список команд"),
 ]
@@ -97,7 +103,7 @@ def status_text(ctx: ControlContext, cli_dry_run: bool = False) -> str:
         f"/on /off — бот: {'on' if state.enabled else 'off'}",
         f"/mode — {effective_mode(state, ctx.settings_mode).value}",
         f"/dryrun — {dry_run_text(ctx, cli_dry_run)}",
-        *(f"/{name} — {'on' if state.feature_on(name) else 'off'}" for name in FEATURES),
+        *(f"/{name} — {'on' if state.feature_on(name) else 'off'}" for name in SWITCHES),
         f"/aggro — {aggression.describe() if aggression else 'normal'}",
     ]
     conn = ctx.connection
@@ -173,12 +179,14 @@ def handle_control(text: str, ctx: ControlContext, cli_dry_run: bool = False) ->
             return "usage: /dryrun on|off|auto"
         state.dry_run_override = None if rest[0] == "auto" else rest[0] == "on"
         return f"dry_run now {effective_dry_run(state, ctx.settings_dry_run, cli_dry_run)}"
+    if command in ("facts", "forget"):
+        return None  # needs the fact store; handled in handlers.py
     if command in ("aggro", "aggression"):
         if len(rest) != 1 or rest[0] not in LEVELS:
             return "usage: /aggro " + "|".join(LEVELS)
         state.aggression = rest[0]
         return f"aggro {rest[0]} (действует со следующего сообщения)"
-    if command in FEATURES:
+    if command in SWITCHES:
         if len(rest) != 1 or rest[0] not in ("on", "off"):
             return f"usage: /{command} on|off"
         state.set_feature(command, rest[0] == "on")

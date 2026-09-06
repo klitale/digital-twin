@@ -42,6 +42,7 @@ class GenerationRequest(BaseModel):
     exclude_pair_ids: list[str] = Field(default_factory=list)
     dry_run: bool = False
     intent: str = Field(default="reply", description="reply | followup | opener")
+    facts: str = Field(default="", description="rendered fact sheet; empty = nothing known")
 
 
 class GenerationResult(BaseModel):
@@ -148,10 +149,12 @@ class RagBackend:
         temperature: float = 0.8,
         max_reply_chars: int = 600,
         markers: Sequence[str] = DEFAULT_ASSISTANT_MARKERS,
+        facts_template: PromptTemplate | None = None,
     ) -> None:
         self.llm = llm
         self.retriever = retriever
         self.template = template
+        self.facts_template = facts_template
         self.name = name
         self.style_profile = style_profile
         self.temperature = temperature
@@ -165,8 +168,18 @@ class RagBackend:
             ts_before=request.ts_before,
             exclude_pair_ids=request.exclude_pair_ids,
         )
+        # A fact sheet is worth a prompt section only when it has something in it: an
+        # empty section measurably cost 0.08 overall on the holdout.
+        facts = request.facts.strip()
+        template = self.facts_template if facts and self.facts_template else self.template
         bundle = build_rag_messages(
-            self.template, self.name, self.style_profile, examples, request.history, request.text
+            template,
+            self.name,
+            self.style_profile,
+            examples,
+            request.history,
+            request.text,
+            facts=request.facts,
         )
         return generate_validated(
             self.llm,

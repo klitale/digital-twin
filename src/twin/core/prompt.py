@@ -10,6 +10,7 @@ from twin.core.prompts import PromptTemplate
 from twin.core.retriever import RetrievedExample
 
 MAX_EXAMPLE_CONTEXT_CHARS = 300
+FACTS_EMPTY = "(пока ничего не известно)"
 
 
 @dataclass(frozen=True)
@@ -46,14 +47,18 @@ def build_rag_messages(
     examples: Sequence[RetrievedExample],
     history: Sequence[MemoryTurn],
     incoming: str,
+    facts: str = "",
 ) -> PromptBundle:
-    system, user = template.render(
-        name=name,
-        style_profile=style_profile.strip(),
-        examples=format_examples(examples, name),
-        history=format_history(history, name),
-        incoming=incoming,
-    )
+    values = {
+        "name": name,
+        "style_profile": style_profile.strip(),
+        "examples": format_examples(examples, name),
+        "history": format_history(history, name),
+        "incoming": incoming,
+    }
+    if "${facts}" in template.system + template.user:
+        values["facts"] = facts.strip() or FACTS_EMPTY
+    system, user = template.render(**values)
     return PromptBundle(
         messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
         version=template.version,

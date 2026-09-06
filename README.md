@@ -127,6 +127,9 @@ Control commands work only in the direct chat with the bot and only from
 | `/followup on\|off` | after the twin's reply and 20-90 min of silence, one nudge with p=0.5 |
 | `/opener on\|off` | after 24 h of silence, on a quarter of days one first message at a random minute between 10:00 and 14:00 |
 | `/aggro low\|normal\|high` | how hard the twin pushes: how often it ignores a message, how often initiative fires, how many messages one reply is split into |
+| `/learn on\|off` | keep a fact sheet per partner, distilled from the live conversation |
+| `/facts <user_id>` | show what the twin has learned about that person |
+| `/forget <user_id>` | wipe that fact sheet |
 | `/poke <user_id> [followup\|opener]` | send an initiative now (still behind every gate) |
 
 A message written by the account owner in a connected chat pauses the bot there for
@@ -138,6 +141,30 @@ boolean. `/aggro` (`src/twin/bot/aggression.py`) scales volume only, never wordi
 `low` the twin ignores more messages, nudges and opens far less often and never sends
 more than two messages in a row; at `high` it almost never ignores a message and its
 initiative probabilities double. `normal` reproduces the configured defaults exactly.
+
+**Learning** (`src/twin/core/facts.py`, off until `/learn on`) is what makes the twin
+know anything that happened after the export. The retrieval index is frozen and the
+per-partner memory holds ten turns, so without it the twin has style but no news. Every
+`FACTS_INTERVAL_HOURS`, and only after `FACTS_MIN_NEW_TURNS` new turns have arrived, the
+gateway model rewrites a short list of durable facts for that chat (`prompts/facts_v1.md`)
+and `rag_v3` puts it in the prompt, below the style profile and above the rules. A sheet
+earns that section only when it has something in it: `rag_v3` with an empty sheet scored
+3.26 against 3.34 for the same run without the section, so an empty sheet falls back to
+`rag_v2` and the twin pays nothing for a feature it is not using. What a *full* sheet is
+worth cannot be measured on the holdout at all, because replaying 2026 messages produces
+no live conversation to learn from; that is an honest gap, not a claim.
+
+One rule keeps it from eating its own tail: **only human-written turns are ever read**.
+`MemoryTurn.by_bot` marks everything the bot generated and `human_turns()` drops it, so a
+detail the twin invented can never come back as something it "knows". What does count is
+the partner's messages and the messages the account owner writes by hand (those already
+pause the bot in that chat; now they are also kept as real material). Sheets are capped
+at `FACTS_MAX` facts of 160 characters, live in `data/state/facts/` and are gitignored.
+
+Note the identity question before switching it on: the account the bot is connected to is
+not the person being imitated, so what the owner types by hand is that owner's writing,
+not the twin's. It is used as *facts about the situation*, never as a style example, and
+nothing is ever added to the retrieval index automatically.
 
 **Initiative** (`src/twin/bot/initiative.py`) is off by default. Because the opener fires
 on only a quarter of days, `/poke <user_id>` is the way to see one on demand, and

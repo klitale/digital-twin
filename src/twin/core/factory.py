@@ -14,18 +14,21 @@ from twin.core.backends import (
     RagBackend,
 )
 from twin.core.embeddings import embeddings_from_settings
+from twin.core.facts import FactStore
 from twin.core.llm_client import LLMClient
 from twin.core.memory import ConversationMemory
-from twin.core.prompts import load_prompt
+from twin.core.prompts import PromptTemplate, load_prompt
 from twin.core.retriever import Retriever
 from twin.core.vector_store import ChromaVectorStore
 from twin.ingest.pipeline import STYLE_PROFILE_FILE
 from twin.ingest.style_profile import read_style_profile
 
 RAG_PROMPT = "rag_v2"
+RAG_FACTS_PROMPT = "rag_v3"  # same prompt plus the fact sheet; used only when it is not empty
 FINETUNED_PROMPT = "finetuned_v1"
 HYBRID_PROMPT = "hybrid_v1"
 INITIATIVE_PROMPT = "initiative_v1"
+FACTS_PROMPT = "facts_v1"
 
 
 def load_style_profile(settings: Settings) -> str:
@@ -85,6 +88,7 @@ def build_backend(
             llm=llm or build_gateway_llm(settings),
             retriever=retriever or build_retriever(settings, k),
             template=load_prompt(RAG_PROMPT),
+            facts_template=load_prompt(RAG_FACTS_PROMPT),
             name=settings.twin_name,
             style_profile=load_style_profile(settings),
             temperature=settings.generation_temperature,
@@ -137,3 +141,12 @@ def style_profile_digest(settings: Settings) -> str | None:
     if not path.is_file():
         return None
     return hashlib.sha256(path.read_bytes()).hexdigest()[:12]
+
+
+def build_fact_store(settings: Settings) -> FactStore:
+    return FactStore(settings.facts_dir)
+
+
+def build_facts_updater(settings: Settings) -> tuple[LLMClient, PromptTemplate]:
+    """The gateway model rewrites fact sheets; the fine-tuned model is never used here."""
+    return build_gateway_llm(settings), load_prompt(FACTS_PROMPT)

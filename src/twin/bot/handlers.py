@@ -54,7 +54,10 @@ from twin.bot.initiative import (
 from twin.bot.state import BotState, StateStore
 from twin.config import ConfigError, Mode, Settings
 from twin.core.backends import GenerationBackend, GenerationRequest
+from twin.core.facts import FactSheet, FactStore, human_turns, update_sheet
+from twin.core.llm_client import LLMClient
 from twin.core.memory import ConversationMemory, MemoryTurn
+from twin.core.prompts import PromptTemplate
 from twin.logsetup import get_logger
 
 log = get_logger("twin.bot")
@@ -94,6 +97,8 @@ class TwinBot:
         skip_rate: float | None = None,
         initiative_backend: GenerationBackend | None = None,
         initiative_factory: InitiativeFactory | None = None,
+        fact_store: FactStore | None = None,
+        facts_factory: Callable[[], tuple[LLMClient, PromptTemplate]] | None = None,
     ) -> None:
         self.bot = bot
         self.settings = settings
@@ -113,6 +118,9 @@ class TwinBot:
         self._initiative_backend = initiative_backend
         self.initiative_factory = initiative_factory
         self.initiative_cfg = InitiativeConfig.from_settings(settings)
+        self.fact_store = fact_store
+        self.facts_factory = facts_factory
+        self._facts_updater: tuple[LLMClient, PromptTemplate] | None = None
 
     # --- helpers -------------------------------------------------------------------
 
@@ -157,6 +165,70 @@ class TwinBot:
                 raise ConfigError("no initiative backend")
             self._initiative_backend = self.initiative_factory()
         return self._initiative_backend
+
+    def facts_for(self, partner_id: int) -> str:
+        """The rendered fact sheet, or nothing at all when learning is off."""
+        if self.fact_store is None or not self.state.feature_on("learn"):
+            return ""
+        return self.fact_store.load(partner_id).render()
+
+    def fact_sheet(self, partner_id: int) -> FactSheet | None:
+        return self.fact_store.load(partner_id) if self.fact_store else None
+
+    def _note_human_turn(self, chat_id: int) -> None:
+        self.state.note_human_turn(chat_id)
+
+    async def learning_tick(self) -> dict[int, str]:
+        """Rewrite fact sheets that are due; one gateway call per chat at most."""
+        results: dict[int, str] = {}
+        if self.fact_store is None or not self.state.feature_on("learn"):
+            return results
+        now = self._now()
+        interval = self.settings.facts_interval_hours * 3600
+        for chat_id in self.settings.allowed_user_ids:
+            key = str(chat_id)
+            new_turns = self.state.human_turns_since_facts.get(key, 0)
+            if new_turns < self.settings.facts_min_new_turns:
+                results[chat_id] = "not_enough_new_turns"
+                continue
+            if now - self.state.last_facts_ts.get(key, 0) < interval:
+                results[chat_id] = "too_soon"
+                continue
+            results[chat_id] = await self._update_facts(chat_id, now)
+        return results
+
+    async def _update_facts(self, chat_id: int, now: int) -> str:
+        assert self.fact_store is not None
+        turns = self.memory.turns(chat_id)
+        if not human_turns(turns):
+            self.state.note_facts_updated(chat_id, now)
+            self.store.save_state(self.state)
+            return "nothing_human_to_learn_from"
+        try:
+            if self._facts_updater is None:
+                if self.facts_factory is None:
+                    return "no_facts_backend"
+                self._facts_updater = self.facts_factory()
+            llm, template = self._facts_updater
+            sheet = await asyncio.to_thread(
+                update_sheet,
+                llm,
+                template,
+                self.fact_store.load(chat_id),
+                turns,
+                self.settings.twin_name,
+                now,
+                self.settings.facts_max,
+            )
+        except Exception as exc:
+            log.error("facts.failed", chat_id=chat_id, error=str(exc)[:200])
+            return "failed"
+        if sheet is None:
+            return "failed"
+        self.fact_store.save(sheet)
+        self.state.note_facts_updated(chat_id, now)
+        self.store.save_state(self.state)
+        return f"updated:{len(sheet.facts)}"
 
     def initiative_status(self) -> str:
         now = self._now()
@@ -218,6 +290,12 @@ class TwinBot:
             reply = f"poke {kind} -> {outcome}"
             await self.bot.send_message(chat_id=message.chat.id, text=reply)
             return reply
+        if parsed is not None and parsed[0] in ("facts", "forget"):
+            reply = self._facts_command(parsed[0], parsed[1])
+            self.store.save_state(self.state)
+            log.info("control", user_id=user.id, command=[parsed[0]])
+            await self.bot.send_message(chat_id=message.chat.id, text=reply)
+            return reply
         reply = handle_control(
             text,
             ControlContext(
@@ -239,6 +317,26 @@ class TwinBot:
         log.info("control", user_id=user.id, command=text.split()[:2])
         await self.bot.send_message(chat_id=message.chat.id, text=reply)
         return reply
+
+    def _facts_command(self, command: str, rest: list[str]) -> str:
+        if len(rest) != 1 or not rest[0].lstrip("-").isdigit():
+            return f"usage: /{command} <user_id>"
+        partner_id = int(rest[0])
+        if self.fact_store is None:
+            return "fact store is not configured"
+        if command == "forget":
+            cleared = self.fact_store.forget(partner_id)
+            self.state.note_facts_updated(partner_id, self._now())
+            return f"facts for {partner_id} " + ("cleared" if cleared else "were already empty")
+        sheet = self.fact_store.load(partner_id)
+        if not sheet.facts:
+            switch = "" if self.state.feature_on("learn") else " (/learn on выключен)"
+            return f"про {partner_id} пока ничего не записано{switch}"
+        pending = self.state.human_turns_since_facts.get(str(partner_id), 0)
+        return (
+            f"про {partner_id}, обновлено по {sheet.turns_seen} репликам, "
+            f"новых с тех пор {pending}:\n" + sheet.render()
+        )
 
     @staticmethod
     def _poke_args(rest: list[str]) -> tuple[int, str] | None:
@@ -271,6 +369,12 @@ class TwinBot:
                 return "own_bot_message"
             until = self.state.pause(chat.id, self.settings.pause_minutes, now)
             self.state.note_outgoing(chat.id, now, "owner")
+            if message.text:
+                # written by a person, not by the bot: real material for learning
+                self.memory.append(
+                    chat.id, MemoryTurn(is_me=True, text=message.text, ts=now, by_bot=False)
+                )
+                self._note_human_turn(chat.id)
             self.store.save_state(self.state)
             log.info("autopause", chat_id=chat.id, until=until, minutes=self.settings.pause_minutes)
             return "owner_message_autopause"
@@ -290,6 +394,7 @@ class TwinBot:
         history = self.memory.turns(partner)
         previous = next((t.text for t in reversed(history) if not t.is_me), None)
         self.memory.append(partner, MemoryTurn(is_me=False, text=text, ts=now))
+        self._note_human_turn(chat.id)
         rate = self.skip_rate if self.skip_rate is not None else self.aggression().skip_rate
         if should_skip(text, self.rng, rate):
             log.info("business_message.skipped", chat_id=chat.id, message_id=message.message_id)
@@ -307,6 +412,7 @@ class TwinBot:
             previous_partner_text=previous,
             history=history,
             dry_run=self.dry_run,
+            facts=self.facts_for(partner),
         )
         try:
             result = await asyncio.to_thread(backend.generate, request)
@@ -315,7 +421,9 @@ class TwinBot:
         if result.text is None:
             log.info("business_message.silent", chat_id=chat.id, rejected=result.rejected)
             return "silent"
-        self.memory.append(partner, MemoryTurn(is_me=True, text=result.text, ts=self._now()))
+        self.memory.append(
+            partner, MemoryTurn(is_me=True, text=result.text, ts=self._now(), by_bot=True)
+        )
         if self.dry_run:
             log.info(
                 "business_message.dry_run",
@@ -372,6 +480,7 @@ class TwinBot:
         previous: dict[int, str] | None = None
         while True:
             try:
+                await self.learning_tick()
                 results = await self.initiative_tick()
                 if results != previous:
                     log.info(
@@ -411,6 +520,7 @@ class TwinBot:
             history=history,
             dry_run=self.dry_run,
             intent=kind,
+            facts=self.facts_for(chat_id),
         )
         try:
             result = await asyncio.to_thread(backend.generate, request)
@@ -419,7 +529,9 @@ class TwinBot:
         if result.text is None:
             log.info("initiative.silent", chat_id=chat_id, kind=kind, rejected=result.rejected)
             return "silent"
-        self.memory.append(chat_id, MemoryTurn(is_me=True, text=result.text, ts=self._now()))
+        self.memory.append(
+            chat_id, MemoryTurn(is_me=True, text=result.text, ts=self._now(), by_bot=True)
+        )
         if self.dry_run:
             log.info(
                 "initiative.dry_run",

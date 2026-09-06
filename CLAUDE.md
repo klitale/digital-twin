@@ -27,6 +27,7 @@ interface, one evaluation harness with a blind judge. Public portfolio repo: no 
 | 8 | Project skills, README | done |
 | 9 | Real fine-tune and three-mode comparison | done: rag 3.22 > finetuned 2.83 > hybrid 2.73 (README) |
 | 10 | Initiative: follow-ups and openers as opt-in features, command menu | done |
+| 11 | Learning: fact sheets from live chats (`/learn`), never from bot output | done |
 
 ## Stack and layout
 Python 3.11, `uv`, `ruff`, `pytest`, `typer`, `pydantic-settings`, `structlog`, `aiogram` 3
@@ -36,11 +37,10 @@ No Docker, no webhook, no userbot, no local model serving.
 ```
 src/twin/  config.py (Settings, require_*), cli.py, logsetup.py; eval/ (harness with
            leakage asserts, judge, compare, report)
-           core/schemas.py (contracts), llm_client.py (one OpenAI-compatible client,
-           reasoning off per model family), prompts.py (versioned prompts/*.md templates),
-           embeddings.py, vector_store.py (Chroma + index manifest), retriever.py (filters,
-           dedupe), prompt.py, backends.py (GenerationBackend, RagBackend, validate-once),
-           validate.py, memory.py, factory.py (build_backend from settings)
+           core/schemas.py (contracts), llm_client.py (one client, reasoning off per
+           model family), prompts.py (versioned prompts/*.md), embeddings.py,
+           vector_store.py (Chroma + manifest), retriever.py, prompt.py, backends.py,
+           validate.py, memory.py, facts.py (sheets from human turns only), factory.py
            bot/handlers.py (gates, autopause, delivery, initiative tick), state.py, app.py,
            business.py, control.py (commands + menu), initiative.py, aggression.py, humanize.py
 deploy/    inventory.sh, push.sh (rsync + install), install.sh <role>, sync_index.sh,

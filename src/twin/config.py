@@ -85,6 +85,9 @@ class Settings(BaseSettings):
     followup_probability: float = 0.5
     initiative_tick_seconds: int = 60
     aggression: str = "normal"  # low | normal | high; /aggro overrides it at runtime
+    facts_interval_hours: int = 6  # how often a fact sheet may be rewritten
+    facts_min_new_turns: int = 6  # and how many new human turns must have arrived
+    facts_max: int = 15
 
     # Generation LLM (OpenAI-compatible gateway)
     llm_base_url: str = "https://api.timeweb.ai/v1"
@@ -165,6 +168,10 @@ class Settings(BaseSettings):
     @property
     def memory_dir(self) -> Path:
         return self.state_dir / "memory"
+
+    @property
+    def facts_dir(self) -> Path:
+        return self.state_dir / "facts"
 
     # --- prerequisite checks -------------------------------------------------------
 

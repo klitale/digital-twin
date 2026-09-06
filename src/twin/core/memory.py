@@ -12,6 +12,9 @@ class MemoryTurn(BaseModel):
     is_me: bool
     text: str
     ts: int
+    by_bot: bool = False
+    """True when the bot generated this turn. Learning never reads such turns, so the
+    twin cannot fold its own inventions back into what it 'knows' (see core/facts.py)."""
 
 
 class ConversationMemory:

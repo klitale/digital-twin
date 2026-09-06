@@ -12,7 +12,13 @@ from twin.bot.control import COMMANDS
 from twin.bot.handlers import TwinBot
 from twin.bot.state import StateStore
 from twin.config import Mode, Settings
-from twin.core.factory import build_backend, build_initiative_backend, build_memory
+from twin.core.factory import (
+    build_backend,
+    build_fact_store,
+    build_facts_updater,
+    build_initiative_backend,
+    build_memory,
+)
 from twin.logsetup import get_logger
 
 log = get_logger("twin.bot.app")
@@ -36,6 +42,8 @@ def build_twin_bot(bot: Bot, settings: Settings, cli_dry_run: bool) -> TwinBot:
         cli_dry_run=cli_dry_run,
         backend_factory=lambda mode: build_backend(settings, mode),
         initiative_factory=lambda: build_initiative_backend(settings),
+        fact_store=build_fact_store(settings),
+        facts_factory=lambda: build_facts_updater(settings),
     )
     twin.backend_for(twin.mode)  # fail fast on a broken index / missing profile
     return twin

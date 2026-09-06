@@ -65,6 +65,10 @@ class BotState(BaseModel):
     opener_plan: dict[str, dict[str, object]] = Field(
         default_factory=dict, description="chat_id -> {day, at, done}"
     )
+    last_facts_ts: dict[str, int] = Field(default_factory=dict, description="fact sheet rewritten")
+    human_turns_since_facts: dict[str, int] = Field(
+        default_factory=dict, description="real turns collected since the last rewrite"
+    )
     peer_write_blocked: dict[str, bool] = Field(
         default_factory=dict,
         description="Telegram refuses a first message there (BUSINESS_PEER_USAGE_MISSING)",
@@ -123,6 +127,17 @@ class BotState(BaseModel):
             self.peer_write_blocked[str(chat_id)] = True
         else:
             self.peer_write_blocked.pop(str(chat_id), None)
+
+    def note_human_turn(self, chat_id: int) -> int:
+        """A turn a person actually wrote (partner or owner); bot output never counts."""
+        key = str(chat_id)
+        self.human_turns_since_facts[key] = self.human_turns_since_facts.get(key, 0) + 1
+        return self.human_turns_since_facts[key]
+
+    def note_facts_updated(self, chat_id: int, ts: int) -> None:
+        key = str(chat_id)
+        self.last_facts_ts[key] = ts
+        self.human_turns_since_facts[key] = 0
 
     def note_incoming(self, chat_id: int, ts: int) -> None:
         self.last_incoming_ts[str(chat_id)] = ts
