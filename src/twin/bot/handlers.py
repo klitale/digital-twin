@@ -14,7 +14,11 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
 
-from aiogram.exceptions import TelegramForbiddenError, TelegramRetryAfter
+from aiogram.exceptions import (
+    TelegramBadRequest,
+    TelegramForbiddenError,
+    TelegramRetryAfter,
+)
 
 from twin.bot.business import (
     CONNECT_INSTRUCTIONS,
@@ -54,6 +58,10 @@ from twin.logsetup import get_logger
 log = get_logger("twin.bot")
 TYPING_INTERVAL_S = 4.0
 SEND_RETRIES = 2
+# Telegram refuses an outgoing message to a peer the business account cannot write to
+# (no dialog, or the chat is outside the chatbot's Selected chats). Deterministic: the
+# bot marks the peer instead of retrying, and clears the mark on the next incoming message.
+PEER_UNAVAILABLE = "BUSINESS_PEER_USAGE_MISSING"
 
 
 class BotLike(Protocol):
@@ -312,6 +320,8 @@ class TwinBot:
             return "disabled"
         if self.state.is_paused(chat_id, now):
             return "paused"
+        if self.state.is_peer_blocked(chat_id):
+            return "peer_unavailable"
         return None
 
     async def initiative_tick(self) -> dict[int, str]:
@@ -402,7 +412,16 @@ class TwinBot:
         else:
             # Telegram can refuse a first message (the chat is outside the business
             # bot's Selected chats): the reply path never hits this, so say it loudly.
-            log.error("initiative.not_delivered", chat_id=chat_id, kind=kind, outcome=outcome)
+            hint = (
+                "Telegram refuses a first message to this chat: the business account has "
+                "no dialog with it, or it is outside the chatbot's Selected chats. Replies "
+                "still work; the bot retries after the next incoming message."
+                if outcome == "peer_unavailable"
+                else ""
+            )
+            log.error(
+                "initiative.not_delivered", chat_id=chat_id, kind=kind, outcome=outcome, hint=hint
+            )
         return outcome
 
     # --- delivery --------------------------------------------------------------------
@@ -440,6 +459,13 @@ class TwinBot:
                 retried_after = True
                 log.warning("send.retry_after", chat_id=chat_id, seconds=exc.retry_after)
                 await self.sleep(float(exc.retry_after))
+            except TelegramBadRequest as exc:
+                if PEER_UNAVAILABLE not in str(exc):
+                    raise
+                self.state.set_peer_blocked(chat_id, True)
+                self.store.save_state(self.state)
+                log.error("send.peer_unavailable", chat_id=chat_id, error=str(exc))
+                return "peer_unavailable"
             except TelegramForbiddenError as exc:
                 self.state.set_chat_enabled(chat_id, False)
                 self.store.save_state(self.state)

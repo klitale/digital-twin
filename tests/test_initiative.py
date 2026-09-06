@@ -9,6 +9,8 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import pytest
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.methods import SendMessage
 from tests.test_bot import (
     ADMIN,
     CONN,
@@ -302,6 +304,29 @@ async def test_silent_generation_and_missing_backend(twin: TwinBot) -> None:
     twin._initiative_backend = None
     assert await twin.poke(PARTNER, "opener") == "backend_unavailable"
     assert await twin.poke(9999, "opener") == "not_allowed"
+
+
+@pytest.mark.asyncio
+async def test_peer_telegram_refuses_is_marked_and_cleared(twin: TwinBot) -> None:
+    """A first message to a chat the business account cannot write to fails deterministically."""
+    await twin.on_business_connection(connection())
+    twin.state.set_feature("opener", True)
+    refusal = TelegramBadRequest(
+        method=SendMessage(chat_id=PARTNER, text="x"),
+        message="Bad Request: BUSINESS_PEER_USAGE_MISSING",
+    )
+    twin.fake_bot.fail_with = [refusal]
+    assert await twin.poke(PARTNER, "opener") == "peer_unavailable"
+    assert twin.store.load_state().is_peer_blocked(PARTNER)
+    # no second attempt: the gate answers before the model is called again
+    calls = len(twin.fake_initiative.requests)
+    assert await twin.poke(PARTNER, "opener") == "peer_unavailable"
+    assert len(twin.fake_initiative.requests) == calls
+    assert (await twin.initiative_tick())[PARTNER] == "peer_unavailable"
+    # an incoming message proves the dialog exists and clears the mark
+    assert await twin.on_business_message(business_message("ты тут?")) == "sent"
+    assert not twin.state.is_peer_blocked(PARTNER)
+    assert await twin.poke(PARTNER, "opener") == "sent"
 
 
 @pytest.mark.asyncio

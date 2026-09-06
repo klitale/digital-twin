@@ -64,6 +64,10 @@ class BotState(BaseModel):
     opener_plan: dict[str, dict[str, object]] = Field(
         default_factory=dict, description="chat_id -> {day, at, done}"
     )
+    peer_write_blocked: dict[str, bool] = Field(
+        default_factory=dict,
+        description="Telegram refuses a first message there (BUSINESS_PEER_USAGE_MISSING)",
+    )
 
     # --- queries -----------------------------------------------------------------
 
@@ -83,6 +87,9 @@ class BotState(BaseModel):
 
     def feature_on(self, name: str) -> bool:
         return self.features.get(name, False)
+
+    def is_peer_blocked(self, chat_id: int) -> bool:
+        return self.peer_write_blocked.get(str(chat_id), False)
 
     def last_activity(self, chat_id: int) -> int | None:
         key = str(chat_id)
@@ -110,8 +117,16 @@ class BotState(BaseModel):
     def set_feature(self, name: str, enabled: bool) -> None:
         self.features[name] = enabled
 
+    def set_peer_blocked(self, chat_id: int, blocked: bool) -> None:
+        if blocked:
+            self.peer_write_blocked[str(chat_id)] = True
+        else:
+            self.peer_write_blocked.pop(str(chat_id), None)
+
     def note_incoming(self, chat_id: int, ts: int) -> None:
         self.last_incoming_ts[str(chat_id)] = ts
+        # an incoming message proves the dialog exists, so a first message may work again
+        self.set_peer_blocked(chat_id, False)
 
     def note_outgoing(self, chat_id: int, ts: int, kind: str) -> None:
         """``kind``: 'reply' (the bot answered), 'owner' (the owner wrote), 'initiative'."""
