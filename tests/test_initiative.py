@@ -24,6 +24,8 @@ from tests.test_bot import (
     settings,
 )
 
+from twin.bot.aggression import MAX_PARTS, SKIP_RATE
+from twin.bot.aggression import resolve as aggression_resolve
 from twin.bot.control import COMMANDS, HELP, parse_command
 from twin.bot.handlers import TwinBot
 from twin.bot.initiative import (
@@ -228,12 +230,13 @@ def twin(tmp_path: Path) -> TwinBot:
 
     clock = {"now": NOON}
     bot = FakeBot()
+    reply_backend = FakeBackend()
     initiative = FakeInitiative(reply="ну чо, как оно?")
     t = TwinBot(
         bot=bot,
         settings=settings(followup_probability=1.0, opener_daily_probability=1.0),
         store=StateStore(tmp_path / "state"),
-        backend=FakeBackend(),
+        backend=reply_backend,
         memory=ConversationMemory(tmp_path / "memory", 10),
         sleep=sleep,
         rng=random.Random(1),
@@ -242,6 +245,7 @@ def twin(tmp_path: Path) -> TwinBot:
         initiative_backend=initiative,
     )
     t.fake_bot = bot  # type: ignore[attr-defined]
+    t.fake_backend = reply_backend  # type: ignore[attr-defined]
     t.fake_initiative = initiative  # type: ignore[attr-defined]
     t.clock_box = clock  # type: ignore[attr-defined]
     return t
@@ -337,8 +341,9 @@ async def test_commands_switch_features_and_poke(twin: TwinBot) -> None:
     assert twin.store.load_state().features == {"followup": True, "opener": True}
     assert await twin.on_direct_message(direct_message("/opener maybe")) == "usage: /opener on|off"
     status = await twin.on_direct_message(direct_message("/status"))
-    assert status and "initiative: followup=on opener=on" in status
-    assert "opener window 10:00-14:00 Europe/Moscow" in status
+    assert status and "/followup — on" in status and "/opener — on" in status
+    assert "окно опенера 10:00-14:00 Europe/Moscow" in status
+    assert "/aggro — normal" in status
     assert await twin.on_direct_message(direct_message("/poke")) == (
         "usage: /poke <user_id> [followup|opener]"
     )
@@ -367,3 +372,51 @@ def test_parse_command_and_menu() -> None:
     assert [name for name, _ in COMMANDS] == [
         line.split(" — ")[0][1:] for line in HELP.splitlines() if line.startswith("/")
     ]
+
+
+# --- aggression -----------------------------------------------------------------------
+
+
+def test_aggression_scales_volume_not_style() -> None:
+    base = dict(followup_probability=0.5, opener_daily_probability=0.25)
+    normal = aggression_resolve("normal", **base)
+    assert normal.level == "normal"
+    assert (normal.followup_probability, normal.opener_daily_probability) == (0.5, 0.25)
+    assert normal.skip_rate == pytest.approx(SKIP_RATE) and normal.max_parts == MAX_PARTS
+    low, high = aggression_resolve("low", **base), aggression_resolve("high", **base)
+    assert low.followup_probability < normal.followup_probability < high.followup_probability
+    assert low.opener_daily_probability < normal.opener_daily_probability
+    assert high.skip_rate < normal.skip_rate < low.skip_rate
+    assert low.max_parts == 2 and high.max_parts == MAX_PARTS
+    # probabilities stay in range and an unknown level falls back to normal
+    loud = aggression_resolve("high", followup_probability=0.8, opener_daily_probability=0.9)
+    assert loud.followup_probability == 1.0 and loud.opener_daily_probability == 1.0
+    assert aggression_resolve("ЛЮТЫЙ", **base) == normal
+    assert aggression_resolve(None, **base) == normal
+    assert "пропуск" in normal.describe() and "до 5 сообщений" in normal.describe()
+
+
+@pytest.mark.asyncio
+async def test_aggro_command_changes_behaviour(twin: TwinBot) -> None:
+    await twin.on_business_connection(connection())
+    twin.skip_rate = None  # follow the level instead of the test override
+    assert twin.aggression().level == "normal"
+    assert await twin.on_direct_message(direct_message("/aggro ЛЮТО")) == (
+        "usage: /aggro low|normal|high"
+    )
+    reply = await twin.on_direct_message(direct_message("/aggro low"))
+    assert reply is not None and reply.startswith("aggro low")
+    assert twin.store.load_state().aggression == "low"
+    assert twin.aggression().level == "low"
+    # a quiet twin ignores more and never floods: two messages per reply at most
+    assert twin.aggression().skip_rate > 0.1
+    twin.fake_backend.reply = "раз\nдва\nтри\nчетыре"
+    assert await twin.on_business_message(business_message("как оно?")) == "sent"
+    to_partner = [m for m in twin.fake_bot.sent if m["chat_id"] == PARTNER]
+    assert [m["text"] for m in to_partner] == ["раз", "два\nтри\nчетыре"]
+    # the initiative config follows the same switch
+    assert twin.initiative_config().followup_probability < twin.initiative_cfg.followup_probability
+    await twin.on_direct_message(direct_message("/aggro high"))
+    assert twin.initiative_config().followup_probability == 1.0
+    status = await twin.on_direct_message(direct_message("/status"))
+    assert status and "/aggro — high" in status

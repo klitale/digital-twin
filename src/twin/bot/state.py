@@ -44,6 +44,7 @@ class BotState(BaseModel):
     enabled: bool = True
     dry_run_override: bool | None = Field(default=None, description="/twin dryrun on|off")
     mode: str | None = Field(default=None, description="/twin mode ...; None = settings")
+    aggression: str | None = Field(default=None, description="/aggro ...; None = settings")
     chat_enabled: dict[str, bool] = Field(default_factory=dict)
     paused_until: dict[str, int] = Field(default_factory=dict, description="chat_id -> unix ts")
     sent_message_ids: dict[str, list[int]] = Field(default_factory=dict)

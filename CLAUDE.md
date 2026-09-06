@@ -41,8 +41,8 @@ src/twin/  config.py (Settings, require_*), cli.py, logsetup.py; eval/ (harness 
            embeddings.py, vector_store.py (Chroma + index manifest), retriever.py (filters,
            dedupe), prompt.py, backends.py (GenerationBackend, RagBackend, validate-once),
            validate.py, memory.py, factory.py (build_backend from settings)
-           bot/handlers.py (TwinBot: gates, autopause, delivery, initiative tick), state.py,
-           business.py, control.py (commands + menu), initiative.py, humanize.py, app.py
+           bot/handlers.py (gates, autopause, delivery, initiative tick), state.py, app.py,
+           business.py, control.py (commands + menu), initiative.py, aggression.py, humanize.py
 deploy/    inventory.sh, push.sh (rsync + install), install.sh <role>, sync_index.sh,
            status.sh, service.sh, roles/*.service, README.md (runbook); hosts.yaml gitignored
            ingest/parse_export.py (parser), reconstruct.py (turns, pairs), anonymize.py,

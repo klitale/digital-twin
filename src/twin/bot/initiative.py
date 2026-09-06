@@ -17,7 +17,7 @@ them late morning, which is where the defaults come from.
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
@@ -59,6 +59,10 @@ class InitiativeConfig:
             followup_window_s=parse_range(settings.followup_minutes, 60, "FOLLOWUP_MINUTES"),
             followup_probability=settings.followup_probability,
         )
+
+    def scaled(self, followup: float, opener: float) -> InitiativeConfig:
+        """Same windows, probabilities replaced (see ``bot/aggression.py``)."""
+        return replace(self, followup_probability=followup, opener_daily_probability=opener)
 
 
 @dataclass(frozen=True)

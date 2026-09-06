@@ -20,6 +20,8 @@ from aiogram.exceptions import (
     TelegramRetryAfter,
 )
 
+from twin.bot.aggression import Aggression
+from twin.bot.aggression import resolve as resolve_aggression
 from twin.bot.business import (
     CONNECT_INSTRUCTIONS,
     ConnectionStatus,
@@ -134,6 +136,20 @@ class TwinBot:
     def _now(self) -> int:
         return int(self.clock())
 
+    def aggression(self) -> Aggression:
+        """``/aggro`` if it was set, otherwise the level from ``.env``."""
+        return resolve_aggression(
+            self.state.aggression or self.settings.aggression,
+            self.initiative_cfg.followup_probability,
+            self.initiative_cfg.opener_daily_probability,
+        )
+
+    def initiative_config(self) -> InitiativeConfig:
+        aggression = self.aggression()
+        return self.initiative_cfg.scaled(
+            aggression.followup_probability, aggression.opener_daily_probability
+        )
+
     def initiative_backend(self) -> GenerationBackend:
         if self._initiative_backend is None:
             if self.initiative_factory is None:
@@ -147,7 +163,7 @@ class TwinBot:
             f"{chat_id}: {describe_plan(self.state, chat_id, now, self.initiative_cfg.tz)}"
             for chat_id in self.settings.allowed_user_ids
         )
-        return f"opener window {window_text(self.initiative_cfg)}; plans: {plans or 'none'}"
+        return f"окно опенера {window_text(self.initiative_cfg)}; планы: {plans or 'нет'}"
 
     def startup_report(self) -> str:
         status = self.connection_status()
@@ -211,6 +227,7 @@ class TwinBot:
                 settings_dry_run=self.settings.dry_run,
                 allowed_user_ids=self.settings.allowed_user_ids,
                 now=self._now(),
+                aggression=self.aggression(),
                 initiative_status=self.initiative_status(),
             ),
             self.cli_dry_run,
@@ -272,8 +289,8 @@ class TwinBot:
         history = self.memory.turns(partner)
         previous = next((t.text for t in reversed(history) if not t.is_me), None)
         self.memory.append(partner, MemoryTurn(is_me=False, text=text, ts=now))
-        rate = self.skip_rate
-        if should_skip(text, self.rng, rate if rate is not None else 1 / 20):
+        rate = self.skip_rate if self.skip_rate is not None else self.aggression().skip_rate
+        if should_skip(text, self.rng, rate):
             log.info("business_message.skipped", chat_id=chat.id, message_id=message.message_id)
             return "skipped"
         try:
@@ -300,7 +317,7 @@ class TwinBot:
                 "business_message.dry_run",
                 chat_id=chat.id,
                 message_id=message.message_id,
-                parts=parts_summary(split_parts(result.text)),
+                parts=parts_summary(split_parts(result.text, self.aggression().max_parts)),
                 response=result.text,
             )
             return "dry_run"
@@ -327,13 +344,14 @@ class TwinBot:
     async def initiative_tick(self) -> dict[int, str]:
         """One scheduler pass over the allowed chats; returns chat_id -> outcome/reason."""
         now = self._now()
+        cfg = self.initiative_config()
         results: dict[int, str] = {}
         for chat_id in self.settings.allowed_user_ids:
             gate = self._initiative_gate(chat_id, now)
             if gate is not None:
                 results[chat_id] = gate
                 continue
-            decision: Decision = decide(self.state, chat_id, now, self.initiative_cfg, self.rng)
+            decision: Decision = decide(self.state, chat_id, now, cfg, self.rng)
             self.store.save_state(self.state)  # plans and roll marks changed
             if decision.kind is None:
                 results[chat_id] = decision.reason
@@ -400,7 +418,7 @@ class TwinBot:
                 "initiative.dry_run",
                 chat_id=chat_id,
                 kind=kind,
-                parts=parts_summary(split_parts(result.text)),
+                parts=parts_summary(split_parts(result.text, self.aggression().max_parts)),
                 response=result.text,
             )
             return "dry_run"
@@ -479,7 +497,7 @@ class TwinBot:
                 await self.sleep(2.0 * attempt)
 
     async def _deliver(self, chat_id: int, conn_id: str, text: str) -> str:
-        parts = split_parts(text)
+        parts = split_parts(text, self.aggression().max_parts)
         await self._typing(chat_id, conn_id, reply_delay_seconds(text, self.rng))
         for index, part in enumerate(parts):
             if index:

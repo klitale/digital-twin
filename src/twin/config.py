@@ -84,6 +84,7 @@ class Settings(BaseSettings):
     followup_minutes: str = "20-90"  # silence after the twin's reply that may trigger a follow-up
     followup_probability: float = 0.5
     initiative_tick_seconds: int = 60
+    aggression: str = "normal"  # low | normal | high; /aggro overrides it at runtime
 
     # Generation LLM (OpenAI-compatible gateway)
     llm_base_url: str = "https://api.timeweb.ai/v1"

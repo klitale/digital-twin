@@ -12,6 +12,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 
+from twin.bot.aggression import LEVELS, Aggression
 from twin.bot.initiative import FEATURES
 from twin.bot.state import BotState, BusinessConnectionRecord
 from twin.config import Mode
@@ -28,10 +29,11 @@ COMMANDS: list[tuple[str, str]] = [
     ("reset", "<user_id> — забыть последние сообщения собеседника"),
     ("followup", "on|off — дожимать, если собеседник замолчал после ответа"),
     ("opener", "on|off — иногда писать первым после долгой тишины"),
+    ("aggro", "low|normal|high — насколько бот наваливает"),
     ("poke", "<user_id> [followup|opener] — написать собеседнику сейчас"),
     ("help", "Список команд"),
 ]
-KNOWN = {name for name, _ in COMMANDS} | {"start", "?"}
+KNOWN = {name for name, _ in COMMANDS} | {"start", "?", "aggression"}
 
 HELP = "\n".join(f"/{name} — {description}" for name, description in COMMANDS) + (
     "\n\nКаждая команда работает и как /twin <команда>."
@@ -47,6 +49,7 @@ class ControlContext:
     settings_dry_run: bool
     allowed_user_ids: list[int]
     now: int
+    aggression: Aggression | None = None
     initiative_status: str = ""
 
 
@@ -77,39 +80,52 @@ def effective_mode(state: BotState, settings_mode: Mode) -> Mode:
     return Mode(state.mode) if state.mode else settings_mode
 
 
+def dry_run_text(ctx: ControlContext, cli_dry_run: bool) -> str:
+    """Say it in the words of ``/dryrun on|off|auto`` instead of a bare boolean."""
+    if cli_dry_run:
+        return "on (бот запущен с --dry-run)"
+    if ctx.state.dry_run_override is not None:
+        return ("on" if ctx.state.dry_run_override else "off") + " (задано командой)"
+    return ("on" if ctx.settings_dry_run else "off") + " (из .env)"
+
+
 def status_text(ctx: ControlContext, cli_dry_run: bool = False) -> str:
+    """One line per switch, in the same order and wording as the command list."""
+    state = ctx.state
+    aggression = ctx.aggression
+    switches = [
+        f"/on /off — бот: {'on' if state.enabled else 'off'}",
+        f"/mode — {effective_mode(state, ctx.settings_mode).value}",
+        f"/dryrun — {dry_run_text(ctx, cli_dry_run)}",
+        *(f"/{name} — {'on' if state.feature_on(name) else 'off'}" for name in FEATURES),
+        f"/aggro — {aggression.describe() if aggression else 'normal'}",
+    ]
     conn = ctx.connection
     if conn is None:
-        connection = "connection: none"
+        connection = "связь: нет"
     else:
         connection = (
-            f"connection: user {conn.user_id}, enabled={conn.is_enabled}, "
-            f"can_reply={conn.can_reply}"
+            f"связь: user {conn.user_id}, "
+            f"{'включена' if conn.is_enabled else 'выключена'}, "
+            f"{'отвечать можно' if conn.can_reply else 'отвечать нельзя'}"
         )
     pauses = [
-        f"{chat_id}: {max(0, until - ctx.now) // 60} min"
-        for chat_id, until in ctx.state.paused_until.items()
+        f"{chat_id} — {max(0, until - ctx.now) // 60} мин"
+        for chat_id, until in state.paused_until.items()
         if until > ctx.now
     ]
-    disabled = [chat for chat, on in ctx.state.chat_enabled.items() if not on]
-    features = " ".join(
-        f"{name}={'on' if ctx.state.feature_on(name) else 'off'}" for name in FEATURES
-    )
+    blocked = [chat for chat, on in state.peer_write_blocked.items() if on]
+    disabled = [chat for chat, on in state.chat_enabled.items() if not on]
     lines = [
-        f"bot: {'on' if ctx.state.enabled else 'off'}",
-        f"mode: {effective_mode(ctx.state, ctx.settings_mode).value}",
-        f"dry_run: {effective_dry_run(ctx.state, ctx.settings_dry_run, cli_dry_run)}"
-        + (
-            f" (override {ctx.state.dry_run_override})"
-            if ctx.state.dry_run_override is not None
-            else ""
-        ),
+        *switches,
+        "",
         connection,
-        f"allowed users: {len(ctx.allowed_user_ids)}",
-        "paused: " + (", ".join(pauses) if pauses else "none"),
-        "disabled chats: " + (", ".join(disabled) if disabled else "none"),
-        f"initiative: {features}",
+        f"собеседников: {len(ctx.allowed_user_ids)}",
+        "паузы: " + (", ".join(pauses) if pauses else "нет"),
+        "выключенные чаты: " + (", ".join(disabled) if disabled else "нет"),
     ]
+    if blocked:
+        lines.append("нельзя написать первым (Telegram): " + ", ".join(blocked))
     if ctx.initiative_status:
         lines.append(ctx.initiative_status)
     return "\n".join(lines)
@@ -157,6 +173,11 @@ def handle_control(text: str, ctx: ControlContext, cli_dry_run: bool = False) ->
             return "usage: /dryrun on|off|auto"
         state.dry_run_override = None if rest[0] == "auto" else rest[0] == "on"
         return f"dry_run now {effective_dry_run(state, ctx.settings_dry_run, cli_dry_run)}"
+    if command in ("aggro", "aggression"):
+        if len(rest) != 1 or rest[0] not in LEVELS:
+            return "usage: /aggro " + "|".join(LEVELS)
+        state.aggression = rest[0]
+        return f"aggro {rest[0]} (действует со следующего сообщения)"
     if command in FEATURES:
         if len(rest) != 1 or rest[0] not in ("on", "off"):
             return f"usage: /{command} on|off"

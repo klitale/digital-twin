@@ -103,10 +103,18 @@ Control commands work only in the direct chat with the bot and only from
 | `/reset <user_id>` | forget that partner's recent turns |
 | `/followup on\|off` | after the twin's reply and 20-90 min of silence, one nudge with p=0.5 |
 | `/opener on\|off` | after 24 h of silence, on a quarter of days one first message at a random minute between 10:00 and 14:00 |
+| `/aggro low\|normal\|high` | how hard the twin pushes: how often it ignores a message, how often initiative fires, how many messages one reply is split into |
 | `/poke <user_id> [followup\|opener]` | send an initiative now (still behind every gate) |
 
 A message written by the account owner in a connected chat pauses the bot there for
 `PAUSE_MINUTES` (if Telegram delivers such messages; otherwise `/pause`).
+
+`/status` lists one line per switch in the same order and wording as the commands, so
+`/dryrun on|off|auto` reads back as `on`/`off` with its source rather than as a bare
+boolean. `/aggro` (`src/twin/bot/aggression.py`) scales volume only, never wording: at
+`low` the twin ignores more messages, nudges and opens far less often and never sends
+more than two messages in a row; at `high` it almost never ignores a message and its
+initiative probabilities double. `normal` reproduces the configured defaults exactly.
 
 **Initiative** (`src/twin/bot/initiative.py`) is off by default. Because the opener fires
 on only a quarter of days, `/poke <user_id>` is the way to see one on demand, and

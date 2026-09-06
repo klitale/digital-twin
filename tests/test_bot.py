@@ -344,7 +344,7 @@ async def test_control_commands_only_from_admins(parts: dict[str, Any]) -> None:
     assert await twin.on_direct_message(direct_message("/twin status", sender=PARTNER)) is None
     assert twin.fake_bot.sent == []
     status = await twin.on_direct_message(direct_message("/twin status"))
-    assert status and "bot: on" in status and "mode: rag" in status and f"user {OWNER}" in status
+    assert status and "бот: on" in status and "/mode — rag" in status and f"user {OWNER}" in status
     assert (
         twin.fake_bot.sent[-1]["chat_id"] == ADMIN
         and "business_connection_id" not in twin.fake_bot.sent[-1]
@@ -389,8 +389,8 @@ def test_handle_control_pure() -> None:
         now=NOW,
     )
     assert handle_control("hello", ctx) is None
-    assert handle_control("/twin@twin_bot status", ctx).startswith("bot: on")
-    assert "connection: none" in handle_control("/twin status", ctx)
+    assert handle_control("/twin@twin_bot status", ctx).startswith("/on /off — бот: on")
+    assert "связь: нет" in handle_control("/twin status", ctx)
     assert handle_control("/twin mode nope", ctx) == "usage: /mode rag|finetuned|hybrid"
     assert handle_control("/twin dryrun off", ctx) == "dry_run now False"
     assert handle_control("/twin whatever", ctx) == HELP
