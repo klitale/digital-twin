@@ -58,3 +58,40 @@ def build_rag_messages(
         messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
         version=template.version,
     )
+
+
+INITIATIVE_TASKS = {
+    "followup": (
+        "Собеседник не ответил на последнее сообщение {name}. Напиши одну короткую реплику-"
+        "продолжение, как делает {name}, когда ему не отвечают: подтолкнуть, переспросить или "
+        "добавить мысль к тому, что он уже написал."
+    ),
+    "opener": (
+        "Переписки давно не было, {name} пишет первым. Напиши короткое первое сообщение: "
+        "зацепись за последнюю тему из переписки, если она есть, иначе начни так, как {name} "
+        "обычно начинает разговор."
+    ),
+}
+
+
+def build_initiative_messages(
+    template: PromptTemplate,
+    name: str,
+    style_profile: str,
+    examples: Sequence[RetrievedExample],
+    history: Sequence[MemoryTurn],
+    intent: str,
+) -> PromptBundle:
+    if intent not in INITIATIVE_TASKS:
+        raise ValueError(f"unknown initiative intent {intent!r}")
+    system, user = template.render(
+        name=name,
+        style_profile=style_profile.strip(),
+        examples=format_examples(examples, name),
+        history=format_history(history, name),
+        task=INITIATIVE_TASKS[intent].format(name=name),
+    )
+    return PromptBundle(
+        messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+        version=template.version,
+    )

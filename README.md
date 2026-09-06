@@ -90,10 +90,34 @@ owner matches `BUSINESS_OWNER_ID`, only in private chats with the two
 `ALLOWED_USER_IDS`, only when enabled and not paused, and only when the generated reply
 passes validation (no empty, over-long or assistant-sounding text). Restrict the
 Telegram-side *Selected chats* to the same two users as a second line of defence.
-Control commands (`/twin on|off|status|mode|reset|pause|dryrun`) work only in the direct
-chat with the bot and only from `ADMIN_USER_IDS`. A message written by the account owner
-in a connected chat pauses the bot there for `PAUSE_MINUTES` (if Telegram delivers such
-messages; otherwise `/twin pause`).
+Control commands work only in the direct chat with the bot and only from
+`ADMIN_USER_IDS`; they are listed in Telegram's command menu (`/help`):
+
+| Command | Effect |
+|---|---|
+| `/status` | connection, mode, dry-run, pauses, initiative switches and today's opener plan |
+| `/on`, `/off` | global switch |
+| `/mode rag\|finetuned\|hybrid` | generation mode from the next message on |
+| `/dryrun on\|off\|auto` | generate but never send (`auto` = `DRY_RUN` from `.env`) |
+| `/pause <user_id> <minutes>` | pause one chat (0 = unpause) |
+| `/reset <user_id>` | forget that partner's recent turns |
+| `/followup on\|off` | after the twin's reply and 20-90 min of silence, one nudge with p=0.5 |
+| `/opener on\|off` | after 24 h of silence, on a quarter of days one first message at a random minute between 10:00 and 14:00 |
+| `/poke <user_id> [followup\|opener]` | send an initiative now (still behind every gate) |
+
+A message written by the account owner in a connected chat pauses the bot there for
+`PAUSE_MINUTES` (if Telegram delivers such messages; otherwise `/pause`).
+
+**Initiative** (`src/twin/bot/initiative.py`) is off by default. The defaults come from
+the export, where the twin started about a quarter of all conversations, nearly all of
+them late morning. Decisions are pure functions of the persisted state, a clock and a
+seeded rng (one decision per reply, one opener plan per local day, never twice), the
+scheduler is a one-minute loop next to polling, and every initiative passes the same
+gates as a reply: verified connection, allowlist, enabled, not paused, validation,
+dry-run. Openers and follow-ups always use the gateway model with `prompts/initiative_v1.md`
+(the fine-tuned 7B only knows how to answer, not how to follow a task). Tunables:
+`INITIATIVE_TZ`, `OPENER_HOURS`, `OPENER_DAILY_PROBABILITY`, `OPENER_SILENCE_HOURS`,
+`FOLLOWUP_MINUTES`, `FOLLOWUP_PROBABILITY`.
 
 ## Privacy
 

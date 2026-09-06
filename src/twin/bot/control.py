@@ -1,7 +1,10 @@
-"""``/twin`` control commands in the direct chat with the bot (section 8.3).
+"""Control commands in the direct chat with the bot (section 8.3).
 
-Accepted only from ``ADMIN_USER_IDS``. Commands change persisted state, so they
-survive restarts; ``/twin status`` summarises everything a dry-run operator needs.
+Accepted only from ``ADMIN_USER_IDS``, as ``/twin <command>`` or as the bare
+``/<command>`` that Telegram's command menu offers (``COMMANDS`` is registered with
+``setMyCommands`` at startup). Commands change persisted state, so they survive
+restarts; ``/status`` summarises everything an operator needs. ``poke`` needs the
+Telegram layer and is executed in ``handlers.py``; it is only parsed here.
 """
 
 from __future__ import annotations
@@ -9,17 +12,29 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 
+from twin.bot.initiative import FEATURES
 from twin.bot.state import BotState, BusinessConnectionRecord
 from twin.config import Mode
 from twin.core.memory import ConversationMemory
 
-HELP = (
-    "/twin on|off — global switch\n"
-    "/twin status — connection, mode, pauses\n"
-    "/twin mode rag|finetuned|hybrid\n"
-    "/twin reset <user_id> — clear that partner's memory\n"
-    "/twin pause <user_id> <minutes> — 0 to unpause\n"
-    "/twin dryrun on|off|auto — override DRY_RUN (auto = from .env)"
+# (command, description shown in Telegram's menu). User-facing, hence Russian.
+COMMANDS: list[tuple[str, str]] = [
+    ("status", "Состояние: связь, режим, dry-run, паузы, инициатива"),
+    ("on", "Включить бота"),
+    ("off", "Выключить бота (ничего не отвечает)"),
+    ("mode", "Режим генерации: rag | finetuned | hybrid"),
+    ("dryrun", "on|off|auto — генерировать, но не отправлять"),
+    ("pause", "<user_id> <минуты> — пауза в чате, 0 = снять"),
+    ("reset", "<user_id> — забыть последние сообщения собеседника"),
+    ("followup", "on|off — дожимать, если собеседник замолчал после ответа"),
+    ("opener", "on|off — иногда писать первым после долгой тишины"),
+    ("poke", "<user_id> [followup|opener] — написать собеседнику сейчас"),
+    ("help", "Список команд"),
+]
+KNOWN = {name for name, _ in COMMANDS} | {"start", "?"}
+
+HELP = "\n".join(f"/{name} — {description}" for name, description in COMMANDS) + (
+    "\n\nКаждая команда работает и как /twin <команда>."
 )
 
 
@@ -32,6 +47,22 @@ class ControlContext:
     settings_dry_run: bool
     allowed_user_ids: list[int]
     now: int
+    initiative_status: str = ""
+
+
+def parse_command(text: str) -> tuple[str, list[str]] | None:
+    """``/twin status`` and ``/status@bot`` both give ``("status", [])``; None otherwise."""
+    parts = text.strip().split()
+    if not parts or not parts[0].startswith("/"):
+        return None
+    head = parts[0][1:].split("@")[0].lower()
+    if head == "twin":
+        if len(parts) == 1:
+            return ("help", [])
+        return (parts[1].lower(), parts[2:])
+    if head in KNOWN:
+        return (head, parts[1:])
+    return None
 
 
 def effective_dry_run(state: BotState, settings_dry_run: bool, cli_dry_run: bool) -> bool:
@@ -61,37 +92,42 @@ def status_text(ctx: ControlContext, cli_dry_run: bool = False) -> str:
         if until > ctx.now
     ]
     disabled = [chat for chat, on in ctx.state.chat_enabled.items() if not on]
-    return "\n".join(
-        [
-            f"bot: {'on' if ctx.state.enabled else 'off'}",
-            f"mode: {effective_mode(ctx.state, ctx.settings_mode).value}",
-            f"dry_run: {effective_dry_run(ctx.state, ctx.settings_dry_run, cli_dry_run)}"
-            + (
-                f" (override {ctx.state.dry_run_override})"
-                if ctx.state.dry_run_override is not None
-                else ""
-            ),
-            connection,
-            f"allowed users: {len(ctx.allowed_user_ids)}",
-            "paused: " + (", ".join(pauses) if pauses else "none"),
-            "disabled chats: " + (", ".join(disabled) if disabled else "none"),
-        ]
+    features = " ".join(
+        f"{name}={'on' if ctx.state.feature_on(name) else 'off'}" for name in FEATURES
     )
+    lines = [
+        f"bot: {'on' if ctx.state.enabled else 'off'}",
+        f"mode: {effective_mode(ctx.state, ctx.settings_mode).value}",
+        f"dry_run: {effective_dry_run(ctx.state, ctx.settings_dry_run, cli_dry_run)}"
+        + (
+            f" (override {ctx.state.dry_run_override})"
+            if ctx.state.dry_run_override is not None
+            else ""
+        ),
+        connection,
+        f"allowed users: {len(ctx.allowed_user_ids)}",
+        "paused: " + (", ".join(pauses) if pauses else "none"),
+        "disabled chats: " + (", ".join(disabled) if disabled else "none"),
+        f"initiative: {features}",
+    ]
+    if ctx.initiative_status:
+        lines.append(ctx.initiative_status)
+    return "\n".join(lines)
 
 
 def handle_control(text: str, ctx: ControlContext, cli_dry_run: bool = False) -> str | None:
-    """Return the reply text, or ``None`` when the message is not a /twin command.
+    """Return the reply text, or ``None`` when the message is not a control command.
 
-    The caller persists ``ctx.state`` after a non-None result.
+    The caller persists ``ctx.state`` after a non-None result. ``poke`` is not handled
+    here (it sends a message): the caller checks ``parse_command`` first.
     """
-    parts = text.strip().split()
-    if not parts or parts[0].split("@")[0] != "/twin":
+    parsed = parse_command(text)
+    if parsed is None:
         return None
-    args = parts[1:]
-    if not args or args[0] in ("help", "?"):
-        return HELP
-    command, rest = args[0], args[1:]
+    command, rest = parsed
     state = ctx.state
+    if command in ("help", "?", "start"):
+        return HELP
     if command in ("on", "off"):
         state.enabled = command == "on"
         return f"bot {'enabled' if state.enabled else 'disabled'}"
@@ -99,17 +135,17 @@ def handle_control(text: str, ctx: ControlContext, cli_dry_run: bool = False) ->
         return status_text(ctx, cli_dry_run)
     if command == "mode":
         if len(rest) != 1 or rest[0] not in Mode.__members__.values():
-            return "usage: /twin mode rag|finetuned|hybrid"
+            return "usage: /mode rag|finetuned|hybrid"
         state.mode = rest[0]
         return f"mode set to {rest[0]} (takes effect on the next message)"
     if command == "reset":
         if len(rest) != 1 or not rest[0].lstrip("-").isdigit():
-            return "usage: /twin reset <user_id>"
+            return "usage: /reset <user_id>"
         cleared = ctx.memory.reset(int(rest[0]))
         return f"memory for {rest[0]} {'cleared' if cleared else 'was already empty'}"
     if command == "pause":
         if len(rest) != 2 or not rest[0].lstrip("-").isdigit() or not rest[1].isdigit():
-            return "usage: /twin pause <user_id> <minutes>"
+            return "usage: /pause <user_id> <minutes>"
         chat_id, minutes = int(rest[0]), int(rest[1])
         if minutes == 0:
             state.unpause(chat_id)
@@ -118,9 +154,16 @@ def handle_control(text: str, ctx: ControlContext, cli_dry_run: bool = False) ->
         return f"chat {chat_id} paused for {minutes} min"
     if command == "dryrun":
         if len(rest) != 1 or rest[0] not in ("on", "off", "auto"):
-            return "usage: /twin dryrun on|off|auto"
+            return "usage: /dryrun on|off|auto"
         state.dry_run_override = None if rest[0] == "auto" else rest[0] == "on"
         return f"dry_run now {effective_dry_run(state, ctx.settings_dry_run, cli_dry_run)}"
+    if command in FEATURES:
+        if len(rest) != 1 or rest[0] not in ("on", "off"):
+            return f"usage: /{command} on|off"
+        state.set_feature(command, rest[0] == "on")
+        return f"{command} {rest[0]}"
+    if command == "poke":
+        return "usage: /poke <user_id> [followup|opener]"
     return HELP
 
 

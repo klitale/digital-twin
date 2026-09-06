@@ -370,7 +370,7 @@ async def test_control_commands_only_from_admins(parts: dict[str, Any]) -> None:
     )
     assert (
         await twin.on_direct_message(direct_message("/twin pause x y"))
-        == "usage: /twin pause <user_id> <minutes>"
+        == "usage: /pause <user_id> <minutes>"
     )
     business = business_message("/twin off", sender=ADMIN)
     assert (
@@ -391,7 +391,7 @@ def test_handle_control_pure() -> None:
     assert handle_control("hello", ctx) is None
     assert handle_control("/twin@twin_bot status", ctx).startswith("bot: on")
     assert "connection: none" in handle_control("/twin status", ctx)
-    assert handle_control("/twin mode nope", ctx) == "usage: /twin mode rag|finetuned|hybrid"
+    assert handle_control("/twin mode nope", ctx) == "usage: /mode rag|finetuned|hybrid"
     assert handle_control("/twin dryrun off", ctx) == "dry_run now False"
     assert handle_control("/twin whatever", ctx) == HELP
 

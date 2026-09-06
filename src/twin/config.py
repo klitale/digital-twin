@@ -74,6 +74,15 @@ class Settings(BaseSettings):
     twin_mode: Mode = Mode.RAG
     dry_run: bool = True
 
+    # Initiative (off until enabled with /followup on, /opener on; see bot/initiative.py)
+    initiative_tz: str = "Europe/Moscow"
+    opener_hours: str = "10-14"  # local hours "HH-HH" in which the twin may write first
+    opener_daily_probability: float = 0.25  # share of days with one opener per partner
+    opener_silence_hours: int = 24  # minimum silence in the chat before an opener
+    followup_minutes: str = "20-90"  # silence after the twin's reply that may trigger a follow-up
+    followup_probability: float = 0.5
+    initiative_tick_seconds: int = 60
+
     # Generation LLM (OpenAI-compatible gateway)
     llm_base_url: str = "https://api.timeweb.ai/v1"
     llm_api_key: SecretStr | None = None

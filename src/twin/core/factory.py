@@ -8,6 +8,7 @@ from twin.core.backends import (
     FinetunedBackend,
     GenerationBackend,
     HybridBackend,
+    InitiativeBackend,
     RagBackend,
 )
 from twin.core.embeddings import embeddings_from_settings
@@ -22,6 +23,7 @@ from twin.ingest.style_profile import read_style_profile
 RAG_PROMPT = "rag_v1"
 FINETUNED_PROMPT = "finetuned_v1"
 HYBRID_PROMPT = "hybrid_v1"
+INITIATIVE_PROMPT = "initiative_v1"
 
 
 def load_style_profile(settings: Settings) -> str:
@@ -109,3 +111,19 @@ def build_backend(
     if not with_fallback:
         return primary
     return FallbackBackend(primary, build_backend(settings, Mode.RAG, k, retriever=retriever))
+
+
+def build_initiative_backend(settings: Settings) -> InitiativeBackend:
+    """Initiative always speaks through the gateway model: the fine-tuned 7B only knows how
+    to answer an incoming message, not how to follow a task."""
+    if not settings.twin_name.strip():
+        raise ConfigError("TWIN_NAME is not set")
+    return InitiativeBackend(
+        llm=build_gateway_llm(settings),
+        retriever=build_retriever(settings),
+        template=load_prompt(INITIATIVE_PROMPT),
+        name=settings.twin_name,
+        style_profile=load_style_profile(settings),
+        temperature=settings.generation_temperature,
+        max_reply_chars=min(settings.max_reply_chars, 300),
+    )

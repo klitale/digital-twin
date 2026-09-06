@@ -26,6 +26,7 @@ interface, one evaluation harness with a blind judge. Public portfolio repo: no 
 | 7 | Eval harness, judge, compare, HTML report | done |
 | 8 | Project skills, README | done |
 | 9 | Real fine-tune and three-mode comparison | done: rag 3.22 > finetuned 2.83 > hybrid 2.73 (README) |
+| 10 | Initiative: follow-ups and openers as opt-in features, command menu | done |
 
 ## Stack and layout
 Python 3.11, `uv`, `ruff`, `pytest`, `typer`, `pydantic-settings`, `structlog`, `aiogram` 3
@@ -40,8 +41,8 @@ src/twin/  config.py (Settings, require_*), cli.py, logsetup.py; eval/ (harness 
            embeddings.py, vector_store.py (Chroma + index manifest), retriever.py (filters,
            dedupe), prompt.py, backends.py (GenerationBackend, RagBackend, validate-once),
            validate.py, memory.py, factory.py (build_backend from settings)
-           bot/handlers.py (TwinBot: fail-closed gates, autopause, delivery), state.py,
-           business.py, control.py (/twin commands), humanize.py, app.py (aiogram polling)
+           bot/handlers.py (TwinBot: gates, autopause, delivery, initiative tick), state.py,
+           business.py, control.py (commands + menu), initiative.py, humanize.py, app.py
 deploy/    inventory.sh, push.sh (rsync + install), install.sh <role>, sync_index.sh,
            status.sh, service.sh, roles/*.service, README.md (runbook); hosts.yaml gitignored
            ingest/parse_export.py (parser), reconstruct.py (turns, pairs), anonymize.py,

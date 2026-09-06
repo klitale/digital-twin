@@ -15,7 +15,13 @@ from pydantic import BaseModel, Field
 
 from twin.core.llm_client import LLMClient, LLMError
 from twin.core.memory import MemoryTurn
-from twin.core.prompt import PromptBundle, build_rag_messages, format_examples, format_history
+from twin.core.prompt import (
+    PromptBundle,
+    build_initiative_messages,
+    build_rag_messages,
+    format_examples,
+    format_history,
+)
 from twin.core.prompts import PromptTemplate
 from twin.core.retriever import Retriever
 from twin.core.validate import DEFAULT_ASSISTANT_MARKERS, validate_reply
@@ -35,6 +41,7 @@ class GenerationRequest(BaseModel):
     ts_before: int | None = Field(default=None, description="Retrieval upper bound (eval).")
     exclude_pair_ids: list[str] = Field(default_factory=list)
     dry_run: bool = False
+    intent: str = Field(default="reply", description="reply | followup | opener")
 
 
 class GenerationResult(BaseModel):
@@ -165,6 +172,56 @@ class RagBackend:
             self.llm,
             bundle,
             mode=self.mode,
+            name=self.name,
+            temperature=self.temperature,
+            max_reply_chars=self.max_reply_chars,
+            markers=self.markers,
+            retrieved_ids=[e.pair_id for e in examples],
+            request=request,
+        )
+
+
+class InitiativeBackend:
+    """Follow-ups and openers: the gateway model, the style profile, examples retrieved for
+    the last partner text, and a task instead of an incoming message (``initiative_v1``)."""
+
+    mode = "initiative"
+
+    def __init__(
+        self,
+        llm: LLMClient,
+        retriever: Retriever,
+        template: PromptTemplate,
+        name: str,
+        style_profile: str,
+        temperature: float = 0.8,
+        max_reply_chars: int = 300,
+        markers: Sequence[str] = DEFAULT_ASSISTANT_MARKERS,
+    ) -> None:
+        self.llm = llm
+        self.retriever = retriever
+        self.template = template
+        self.name = name
+        self.style_profile = style_profile
+        self.temperature = temperature
+        self.max_reply_chars = max_reply_chars
+        self.markers = markers
+
+    def generate(self, request: GenerationRequest) -> GenerationResult:
+        examples = (
+            self.retriever.retrieve(
+                request.text, previous_partner_text=request.previous_partner_text
+            )
+            if request.text.strip()
+            else []
+        )
+        bundle = build_initiative_messages(
+            self.template, self.name, self.style_profile, examples, request.history, request.intent
+        )
+        return generate_validated(
+            self.llm,
+            bundle,
+            mode=f"{self.mode}.{request.intent}",
             name=self.name,
             temperature=self.temperature,
             max_reply_chars=self.max_reply_chars,

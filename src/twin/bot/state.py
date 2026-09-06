@@ -47,6 +47,23 @@ class BotState(BaseModel):
     chat_enabled: dict[str, bool] = Field(default_factory=dict)
     paused_until: dict[str, int] = Field(default_factory=dict, description="chat_id -> unix ts")
     sent_message_ids: dict[str, list[int]] = Field(default_factory=dict)
+    features: dict[str, bool] = Field(
+        default_factory=dict, description="initiative switches: followup, opener (default off)"
+    )
+    last_incoming_ts: dict[str, int] = Field(default_factory=dict, description="partner wrote")
+    last_outgoing_ts: dict[str, int] = Field(
+        default_factory=dict, description="bot or owner wrote in the chat"
+    )
+    last_bot_reply_ts: dict[str, int] = Field(
+        default_factory=dict, description="bot's own reply (not initiative)"
+    )
+    last_initiative_ts: dict[str, int] = Field(default_factory=dict)
+    followup_rolled_for: dict[str, int] = Field(
+        default_factory=dict, description="chat_id -> bot reply ts the follow-up was decided for"
+    )
+    opener_plan: dict[str, dict[str, object]] = Field(
+        default_factory=dict, description="chat_id -> {day, at, done}"
+    )
 
     # --- queries -----------------------------------------------------------------
 
@@ -63,6 +80,14 @@ class BotState(BaseModel):
 
     def was_sent_by_bot(self, chat_id: int, message_id: int) -> bool:
         return message_id in self.sent_message_ids.get(str(chat_id), [])
+
+    def feature_on(self, name: str) -> bool:
+        return self.features.get(name, False)
+
+    def last_activity(self, chat_id: int) -> int | None:
+        key = str(chat_id)
+        values = [v for v in (self.last_incoming_ts.get(key), self.last_outgoing_ts.get(key)) if v]
+        return max(values) if values else None
 
     # --- mutations ---------------------------------------------------------------
 
@@ -81,6 +106,21 @@ class BotState(BaseModel):
 
     def set_chat_enabled(self, chat_id: int, enabled: bool) -> None:
         self.chat_enabled[str(chat_id)] = enabled
+
+    def set_feature(self, name: str, enabled: bool) -> None:
+        self.features[name] = enabled
+
+    def note_incoming(self, chat_id: int, ts: int) -> None:
+        self.last_incoming_ts[str(chat_id)] = ts
+
+    def note_outgoing(self, chat_id: int, ts: int, kind: str) -> None:
+        """``kind``: 'reply' (the bot answered), 'owner' (the owner wrote), 'initiative'."""
+        key = str(chat_id)
+        self.last_outgoing_ts[key] = ts
+        if kind == "reply":
+            self.last_bot_reply_ts[key] = ts
+        elif kind == "initiative":
+            self.last_initiative_ts[key] = ts
 
 
 class StateStore:

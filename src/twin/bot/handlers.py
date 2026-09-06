@@ -28,6 +28,7 @@ from twin.bot.control import (
     effective_mode,
     handle_control,
     is_admin,
+    parse_command,
 )
 from twin.bot.humanize import (
     parts_summary,
@@ -35,6 +36,14 @@ from twin.bot.humanize import (
     reply_delay_seconds,
     should_skip,
     split_parts,
+)
+from twin.bot.initiative import (
+    FEATURES,
+    Decision,
+    InitiativeConfig,
+    decide,
+    describe_plan,
+    window_text,
 )
 from twin.bot.state import BotState, StateStore
 from twin.config import ConfigError, Mode, Settings
@@ -55,6 +64,7 @@ class BotLike(Protocol):
 
 Sleep = Callable[[float], Awaitable[None]]
 BackendFactory = Callable[[Mode], GenerationBackend]
+InitiativeFactory = Callable[[], GenerationBackend]
 
 
 class TwinBot:
@@ -71,6 +81,8 @@ class TwinBot:
         rng: random.Random | None = None,
         clock: Callable[[], float] = time.time,
         skip_rate: float | None = None,
+        initiative_backend: GenerationBackend | None = None,
+        initiative_factory: InitiativeFactory | None = None,
     ) -> None:
         self.bot = bot
         self.settings = settings
@@ -87,6 +99,9 @@ class TwinBot:
         self._backends: dict[Mode, GenerationBackend] = {}
         if backend is not None:
             self._backends[Mode(backend.mode)] = backend
+        self._initiative_backend = initiative_backend
+        self.initiative_factory = initiative_factory
+        self.initiative_cfg = InitiativeConfig.from_settings(settings)
 
     # --- helpers -------------------------------------------------------------------
 
@@ -110,6 +125,21 @@ class TwinBot:
 
     def _now(self) -> int:
         return int(self.clock())
+
+    def initiative_backend(self) -> GenerationBackend:
+        if self._initiative_backend is None:
+            if self.initiative_factory is None:
+                raise ConfigError("no initiative backend")
+            self._initiative_backend = self.initiative_factory()
+        return self._initiative_backend
+
+    def initiative_status(self) -> str:
+        now = self._now()
+        plans = ", ".join(
+            f"{chat_id}: {describe_plan(self.state, chat_id, now, self.initiative_cfg.tz)}"
+            for chat_id in self.settings.allowed_user_ids
+        )
+        return f"opener window {window_text(self.initiative_cfg)}; plans: {plans or 'none'}"
 
     def startup_report(self) -> str:
         status = self.connection_status()
@@ -153,6 +183,14 @@ class TwinBot:
             log.info("control.ignored", user_id=user.id if user else None)
             return None
         text = message.text or ""
+        parsed = parse_command(text)
+        if parsed is not None and parsed[0] == "poke" and self._poke_args(parsed[1]):
+            chat_id, kind = self._poke_args(parsed[1])  # type: ignore[misc]
+            log.info("control", user_id=user.id, command=["poke", kind])
+            outcome = await self.poke(chat_id, kind)
+            reply = f"poke {kind} -> {outcome}"
+            await self.bot.send_message(chat_id=message.chat.id, text=reply)
+            return reply
         reply = handle_control(
             text,
             ControlContext(
@@ -163,6 +201,7 @@ class TwinBot:
                 settings_dry_run=self.settings.dry_run,
                 allowed_user_ids=self.settings.allowed_user_ids,
                 now=self._now(),
+                initiative_status=self.initiative_status(),
             ),
             self.cli_dry_run,
         )
@@ -172,6 +211,15 @@ class TwinBot:
         log.info("control", user_id=user.id, command=text.split()[:2])
         await self.bot.send_message(chat_id=message.chat.id, text=reply)
         return reply
+
+    @staticmethod
+    def _poke_args(rest: list[str]) -> tuple[int, str] | None:
+        if not rest or not rest[0].lstrip("-").isdigit():
+            return None
+        kind = rest[1] if len(rest) > 1 else "opener"
+        if kind not in FEATURES:
+            return None
+        return int(rest[0]), kind
 
     async def on_business_message(self, message: Any) -> str:
         """Fail-closed pipeline for one incoming message in a connected chat."""
@@ -194,12 +242,15 @@ class TwinBot:
             if self.state.was_sent_by_bot(chat.id, message.message_id):
                 return "own_bot_message"
             until = self.state.pause(chat.id, self.settings.pause_minutes, now)
+            self.state.note_outgoing(chat.id, now, "owner")
             self.store.save_state(self.state)
             log.info("autopause", chat_id=chat.id, until=until, minutes=self.settings.pause_minutes)
             return "owner_message_autopause"
         if user.id not in self.settings.allowed_user_ids:
             log.info("business_message.ignored", reason="user not allowed", user_id=user.id)
             return "not_allowed"
+        self.state.note_incoming(chat.id, now)
+        self.store.save_state(self.state)
         if not self.state.enabled or not self.state.is_chat_enabled(chat.id):
             return "disabled"
         if self.state.is_paused(chat.id, now):
@@ -243,7 +294,98 @@ class TwinBot:
                 response=result.text,
             )
             return "dry_run"
-        return await self._deliver(chat.id, status.record.business_connection_id, result.text)
+        outcome = await self._deliver(chat.id, status.record.business_connection_id, result.text)
+        if outcome == "sent":
+            self.state.note_outgoing(chat.id, self._now(), "reply")
+            self.store.save_state(self.state)
+        return outcome
+
+    # --- initiative --------------------------------------------------------------------
+
+    def _initiative_gate(self, chat_id: int, now: int) -> str | None:
+        status = self.connection_status()
+        if not status.operational or status.record is None:
+            return "no_connection"
+        if not self.state.enabled or not self.state.is_chat_enabled(chat_id):
+            return "disabled"
+        if self.state.is_paused(chat_id, now):
+            return "paused"
+        return None
+
+    async def initiative_tick(self) -> dict[int, str]:
+        """One scheduler pass over the allowed chats; returns chat_id -> outcome/reason."""
+        now = self._now()
+        results: dict[int, str] = {}
+        for chat_id in self.settings.allowed_user_ids:
+            gate = self._initiative_gate(chat_id, now)
+            if gate is not None:
+                results[chat_id] = gate
+                continue
+            decision: Decision = decide(self.state, chat_id, now, self.initiative_cfg, self.rng)
+            self.store.save_state(self.state)  # plans and roll marks changed
+            if decision.kind is None:
+                results[chat_id] = decision.reason
+                continue
+            results[chat_id] = await self._initiate(chat_id, decision.kind)
+        return results
+
+    async def initiative_loop(self) -> None:
+        """Background task next to polling; never raises."""
+        while True:
+            try:
+                await self.initiative_tick()
+            except Exception as exc:  # the loop must survive a bad tick
+                log.error("initiative.tick_failed", error=str(exc))
+            await self.sleep(float(self.settings.initiative_tick_seconds))
+
+    async def poke(self, chat_id: int, kind: str) -> str:
+        """``/poke``: an initiative now, past the schedule but never past the gates."""
+        if chat_id not in self.settings.allowed_user_ids:
+            return "not_allowed"
+        gate = self._initiative_gate(chat_id, self._now())
+        return gate if gate is not None else await self._initiate(chat_id, kind)
+
+    async def _initiate(self, chat_id: int, kind: str) -> str:
+        status = self.connection_status()
+        if status.record is None:
+            return "no_connection"
+        history = self.memory.turns(chat_id)
+        partner_texts = [t.text for t in history if not t.is_me]
+        query = partner_texts[-1] if partner_texts else (history[-1].text if history else "")
+        try:
+            backend = self.initiative_backend()
+        except ConfigError as exc:
+            log.error("initiative.backend_unavailable", error=str(exc))
+            return "backend_unavailable"
+        request = GenerationRequest(
+            partner_id=chat_id,
+            chat_id=chat_id,
+            text=query,
+            previous_partner_text=partner_texts[-2] if len(partner_texts) > 1 else None,
+            history=history,
+            dry_run=self.dry_run,
+            intent=kind,
+        )
+        result = await asyncio.to_thread(backend.generate, request)
+        if result.text is None:
+            log.info("initiative.silent", chat_id=chat_id, kind=kind, rejected=result.rejected)
+            return "silent"
+        self.memory.append(chat_id, MemoryTurn(is_me=True, text=result.text, ts=self._now()))
+        if self.dry_run:
+            log.info(
+                "initiative.dry_run",
+                chat_id=chat_id,
+                kind=kind,
+                parts=parts_summary(split_parts(result.text)),
+                response=result.text,
+            )
+            return "dry_run"
+        outcome = await self._deliver(chat_id, status.record.business_connection_id, result.text)
+        if outcome == "sent":
+            self.state.note_outgoing(chat_id, self._now(), "initiative")
+            self.store.save_state(self.state)
+            log.info("initiative.sent", chat_id=chat_id, kind=kind)
+        return outcome
 
     # --- delivery --------------------------------------------------------------------
 
