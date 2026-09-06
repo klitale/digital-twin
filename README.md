@@ -65,6 +65,24 @@ Dataset filters and the split live in `configs/data/default.yaml`; training in
 prompt template, train config and eval run carries a version, and every run records
 the git commit, so any number in `data/eval/report.html` is reproducible.
 
+## Results (one run per mode, 80 holdout pairs, blind judge `gpt-5.4-mini`)
+
+| mode | overall | style | appropriateness | not assistant-like | consistency | p50 latency |
+|---|---|---|---|---|---|---|
+| `rag` (Qwen 3.5 Flash via gateway) | **3.22** | 2.50 | 3.00 | 4.60 | 2.79 | 1.25 s |
+| `finetuned` (Qwen 2.5 7B + LoRA, 2 epochs, loss 3.3 -> 2.44) | 2.83 | 2.05 | 2.51 | 4.34 | 2.43 | 1.06 s |
+| `hybrid` (the adapter + top-8 examples) | 2.73 | 1.95 | 2.43 | 4.19 | 2.38 | 1.12 s |
+
+Scores are 1-5 per criterion; run-to-run noise on this sample is about ±0.1, so the gaps
+are real. What the records show: the adapter reproduces the twin's *form* well (median
+reply length 36 chars against 37 in the references, short lines, no assistant tone),
+but a 7B model loses to the much larger gateway model on picking the right thing to say.
+Hybrid is the worst of the three: with only a short prompt the 7B model tends to
+paraphrase the retrieved examples into longer, rambling replies (median 41 chars).
+The judge compares against a single reference reply, which caps `style` for every mode:
+most replies in this chat are one-line reactions that no model can predict exactly.
+`data/eval/report.html` has every reply next to its reference and the judge's reasons.
+
 ## Telegram safety
 
 The bot fails closed: it replies only through a verified business connection whose
