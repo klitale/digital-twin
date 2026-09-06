@@ -60,6 +60,7 @@ from twin.logsetup import get_logger
 log = get_logger("twin.bot")
 TYPING_INTERVAL_S = 4.0
 SEND_RETRIES = 2
+QUOTA_MARKER = "exceeded your usage limit"
 # Telegram refuses an outgoing message to a peer the business account cannot write to
 # (no dialog, or the chat is outside the chatbot's Selected chats). Deterministic: the
 # bot marks the peer instead of retrying, and clears the mark on the next incoming message.
@@ -307,7 +308,10 @@ class TwinBot:
             history=history,
             dry_run=self.dry_run,
         )
-        result = await asyncio.to_thread(backend.generate, request)
+        try:
+            result = await asyncio.to_thread(backend.generate, request)
+        except Exception as exc:  # retrieval or the gateway is down; stay silent, say why
+            return self._log_generation_failure(chat.id, self.mode.value, exc)
         if result.text is None:
             log.info("business_message.silent", chat_id=chat.id, rejected=result.rejected)
             return "silent"
@@ -408,7 +412,10 @@ class TwinBot:
             dry_run=self.dry_run,
             intent=kind,
         )
-        result = await asyncio.to_thread(backend.generate, request)
+        try:
+            result = await asyncio.to_thread(backend.generate, request)
+        except Exception as exc:
+            return self._log_generation_failure(chat_id, f"initiative.{kind}", exc)
         if result.text is None:
             log.info("initiative.silent", chat_id=chat_id, kind=kind, rejected=result.rejected)
             return "silent"
@@ -441,6 +448,20 @@ class TwinBot:
                 "initiative.not_delivered", chat_id=chat_id, kind=kind, outcome=outcome, hint=hint
             )
         return outcome
+
+    @staticmethod
+    def _log_generation_failure(chat_id: int, mode: str, exc: Exception) -> str:
+        """A dead gateway must not kill the handler: one readable record, no traceback."""
+        error = str(exc)
+        quota = QUOTA_MARKER in error
+        log.error(
+            "generation.failed",
+            chat_id=chat_id,
+            mode=mode,
+            error=error[:300],
+            hint="the LLM gateway plan is out of quota; top it up" if quota else "",
+        )
+        return "quota_exceeded" if quota else "generation_failed"
 
     # --- delivery --------------------------------------------------------------------
 

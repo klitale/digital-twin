@@ -38,6 +38,7 @@ from twin.bot.initiative import (
     plan_opener,
 )
 from twin.bot.state import BotState, StateStore
+from twin.config import Mode
 from twin.core.backends import GenerationRequest, GenerationResult
 from twin.core.memory import ConversationMemory
 from twin.core.prompt import build_initiative_messages
@@ -286,6 +287,8 @@ async def test_opener_in_dry_run_logs_and_does_not_send(twin: TwinBot) -> None:
     await twin.on_business_connection(connection())
     twin.state.dry_run_override = True
     twin.state.set_feature("opener", True)
+    twin.state.last_incoming_ts.clear()
+    twin.state.last_outgoing_ts.clear()
     twin.state.opener_plan[str(PARTNER)] = {"day": "2026-09-07", "at": NOON, "done": False}
     twin.state.opener_plan[str(OTHER)] = {"day": "2026-09-07", "at": None, "done": False}
     assert await twin.initiative_tick() == {
@@ -420,3 +423,34 @@ async def test_aggro_command_changes_behaviour(twin: TwinBot) -> None:
     assert twin.initiative_config().followup_probability == 1.0
     status = await twin.on_direct_message(direct_message("/status"))
     assert status and "/aggro — high" in status
+
+
+# --- a dead gateway -------------------------------------------------------------------
+
+
+class BrokenBackend(FakeBackend):
+    def __init__(self, error: Exception) -> None:
+        super().__init__()
+        self.error = error
+
+    def generate(self, request: GenerationRequest) -> GenerationResult:
+        raise self.error
+
+
+@pytest.mark.asyncio
+async def test_gateway_failure_is_logged_not_raised(twin: TwinBot) -> None:
+    """Retrieval or the gateway dying must not kill the handler or the initiative loop."""
+    await twin.on_business_connection(connection())
+    quota = RuntimeError(
+        "dashscope/text-embedding-v4: Error code: 422 - You have exceeded your usage limit."
+    )
+    twin._backends[Mode.RAG] = BrokenBackend(quota)
+    assert await twin.on_business_message(business_message("привет")) == "quota_exceeded"
+    assert twin.fake_bot.sent == []
+    twin._initiative_backend = BrokenBackend(ValueError("index is gone"))
+    assert await twin.poke(PARTNER, "opener") == "generation_failed"
+    twin.state.set_feature("opener", True)
+    twin.state.note_incoming(PARTNER, NOON - 48 * HOUR)  # silent long enough for an opener
+    twin.state.opener_plan[str(PARTNER)] = {"day": "2026-09-07", "at": NOON, "done": False}
+    assert (await twin.initiative_tick())[PARTNER] == "generation_failed"
+    assert twin.fake_bot.sent == []

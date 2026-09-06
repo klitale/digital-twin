@@ -20,7 +20,7 @@ from twin.core.vector_store import ChromaVectorStore
 from twin.ingest.pipeline import STYLE_PROFILE_FILE
 from twin.ingest.style_profile import read_style_profile
 
-RAG_PROMPT = "rag_v1"
+RAG_PROMPT = "rag_v1"  # rag_v2 is a candidate: adopt it only after an eval run
 FINETUNED_PROMPT = "finetuned_v1"
 HYBRID_PROMPT = "hybrid_v1"
 INITIATIVE_PROMPT = "initiative_v1"
