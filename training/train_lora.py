@@ -165,9 +165,24 @@ def split_examples(
     ]
 
 
+def latest_checkpoint(output_dir: Path) -> Path | None:
+    candidates = sorted(
+        (p for p in output_dir.glob("checkpoint-*") if p.is_dir()),
+        key=lambda p: int(p.name.split("-")[-1]) if p.name.split("-")[-1].isdigit() else -1,
+    )
+    return candidates[-1] if candidates else None
+
+
 def train(
-    config: TrainConfig, dataset_path: Path, output_dir: Path, dry_run: bool = False
+    config: TrainConfig,
+    dataset_path: Path,
+    output_dir: Path,
+    dry_run: bool = False,
+    callbacks: list[Any] | None = None,
+    resume: bool = True,
 ) -> dict[str, Any]:
+    """``resume`` continues from the newest ``checkpoint-*`` in ``output_dir`` if present
+    (a killed job loses at most ``save_steps`` steps when checkpoints live on a Volume)."""
     from transformers import Trainer, TrainingArguments
 
     started = time.time()
@@ -217,8 +232,10 @@ def train(
         train_dataset=train_examples,
         eval_dataset=eval_examples or None,
         data_collator=_Collator(pad_id),
+        callbacks=callbacks or None,
     )
-    result = trainer.train()
+    checkpoint = latest_checkpoint(output_dir) if resume and not dry_run else None
+    result = trainer.train(resume_from_checkpoint=str(checkpoint) if checkpoint else None)
     adapter_dir = output_dir / "adapter"
     model.save_pretrained(str(adapter_dir))
     tokenizer.save_pretrained(str(adapter_dir))
@@ -241,6 +258,7 @@ def train(
         "seconds": round(time.time() - started, 1),
         "adapter_dir": str(adapter_dir),
         "dry_run": dry_run,
+        "resumed_from": checkpoint.name if checkpoint else None,
     }
     (output_dir / "train_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     (output_dir / "train_config.json").write_text(

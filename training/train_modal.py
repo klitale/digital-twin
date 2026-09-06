@@ -41,17 +41,27 @@ image = (
 )
 def train_remote(config_yaml: str, dataset_bytes: bytes, manifest_json: str, dry_run: bool) -> dict:
     import yaml
+    from transformers import TrainerCallback
 
     from training.train_config import TrainConfig
     from training.train_lora import train
+
+    class CommitCheckpoints(TrainerCallback):
+        """Persist every checkpoint to the Volume so a killed job can resume."""
+
+        def on_save(self, args, state, control, **kwargs):  # type: ignore[no-untyped-def]
+            volume.commit()
+            print(f"checkpoint committed at step {state.global_step}")
 
     config = TrainConfig.model_validate(yaml.safe_load(config_yaml))
     work = Path("/tmp/twin-train")
     work.mkdir(parents=True, exist_ok=True)
     dataset = work / "train.jsonl"
     dataset.write_bytes(dataset_bytes)
-    run_dir = work / "run"
-    summary = train(config, dataset, run_dir, dry_run=dry_run)
+    # checkpoints live on the Volume: a job killed by a spend limit or a preemption
+    # resumes from the newest checkpoint on the next launch
+    run_dir = (work / "run") if dry_run else (REMOTE_ROOT / "runs" / config.name)
+    summary = train(config, dataset, run_dir, dry_run=dry_run, callbacks=[CommitCheckpoints()])
 
     target = REMOTE_ROOT / "adapters" / config.name
     if target.exists():
@@ -60,6 +70,10 @@ def train_remote(config_yaml: str, dataset_bytes: bytes, manifest_json: str, dry
     (target / "train_config.yaml").write_text(config_yaml, encoding="utf-8")
     (target / "train_manifest.json").write_text(manifest_json, encoding="utf-8")
     (target / "train_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    if not dry_run:
+        shutil.rmtree(
+            run_dir, ignore_errors=True
+        )  # checkpoints are not needed once the adapter exists
     volume.commit()
     summary["adapter_path"] = str(target)
     return summary

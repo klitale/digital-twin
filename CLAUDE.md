@@ -25,7 +25,7 @@ interface, one evaluation harness with a blind judge. Public portfolio repo: no 
 | 6 | Fine-tuning pipeline + Modal serving + backends | done |
 | 7 | Eval harness, judge, compare, HTML report | done |
 | 8 | Project skills, README | done |
-| 9 | Real fine-tune and three-mode comparison | in progress |
+| 9 | Real fine-tune and three-mode comparison | blocked: Modal spend limit |
 
 ## Stack and layout
 Python 3.11, `uv`, `ruff`, `pytest`, `typer`, `pydantic-settings`, `structlog`, `aiogram` 3

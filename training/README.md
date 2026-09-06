@@ -39,6 +39,14 @@ config (`gpu:`), the dry run always uses T4.
 hour (Qwen 2.5 7B in 4-bit, seq 2048), ~$1-2 of GPU time; T4 works too but 2-3x slower.
 The first run also downloads the base model into the `digital-twin-hf-cache` Volume.
 
+## Spend limits and resuming
+
+Modal stops every function the moment the workspace spend limit is exceeded
+("Workspace … has exceeded its spend limit"): the serving endpoint answers 4xx and a
+running training job is killed. Raise the limit in the Modal dashboard (Settings →
+Billing) and simply relaunch the same command: checkpoints are written to the Volume
+every `save_steps` steps and the trainer resumes from the newest one.
+
 ## After training
 
 ```bash
