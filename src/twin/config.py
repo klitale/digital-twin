@@ -83,6 +83,7 @@ class Settings(BaseSettings):
     ft_base_url: str | None = None
     ft_api_key: SecretStr | None = None
     ft_model: str = "base"
+    ft_timeout_seconds: float = 25.0  # bounded wait for a (possibly cold) Modal endpoint
 
     # Judge
     judge_base_url: str = "https://api.timeweb.ai/v1"

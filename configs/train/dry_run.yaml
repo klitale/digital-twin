@@ -1,0 +1,29 @@
+# Pipeline check: tiny model, five examples, two steps, no 4-bit, CPU or any GPU.
+name: dry-run
+base_model: Qwen/Qwen2.5-0.5B-Instruct
+dataset: data/train/train.jsonl
+dataset_version: null
+seed: 1
+max_seq_length: 512
+load_in_4bit: false
+lora:
+  r: 8
+  alpha: 8
+  dropout: 0.0
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+train:
+  epochs: 1
+  learning_rate: 2.0e-4
+  per_device_batch_size: 1
+  gradient_accumulation_steps: 1
+  warmup_ratio: 0.0
+  lr_scheduler: constant
+  weight_decay: 0.0
+  logging_steps: 1
+  save_steps: 1000
+  max_steps: 2
+  eval_fraction: 0.0
+  eval_steps: 1000
+output_dir: outputs/dry-run
+gpu: T4
+max_examples: 5

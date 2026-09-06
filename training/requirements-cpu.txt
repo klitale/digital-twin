@@ -1,0 +1,6 @@
+# CPU dry-run of the training pipeline on a workstation (no CUDA, no Unsloth).
+# Run: uv run --with-requirements training/requirements-cpu.txt twin train --dry-run
+torch<2.3          # last torch with macOS x86_64 wheels; on Linux any recent version works
+transformers<5
+peft
+accelerate

@@ -1,0 +1,8 @@
+# Modal / Colab GPU image for training (installed there, never on the workstation).
+unsloth
+trl
+peft
+transformers<5
+datasets
+accelerate
+bitsandbytes

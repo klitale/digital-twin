@@ -1,0 +1,29 @@
+# LoRA fine-tune of the twin on the full training set (Modal GPU job). Nothing about the
+# run is hardcoded in scripts: this file is copied next to the adapter.
+name: twin
+base_model: Qwen/Qwen2.5-7B-Instruct
+dataset: data/train/train.jsonl        # produced by `twin train` (prepare step) from pairs.jsonl
+dataset_version: null                  # filled from data/train/train_manifest.json at launch
+seed: 20260905
+max_seq_length: 2048
+load_in_4bit: true
+lora:
+  r: 16
+  alpha: 16
+  dropout: 0.0
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+train:
+  epochs: 2
+  learning_rate: 2.0e-4
+  per_device_batch_size: 2
+  gradient_accumulation_steps: 4
+  warmup_ratio: 0.03
+  lr_scheduler: cosine
+  weight_decay: 0.01
+  logging_steps: 10
+  save_steps: 200
+  max_steps: null                      # null = full epochs
+  eval_fraction: 0.02                  # held out from train.jsonl for loss tracking (not the eval holdout)
+  eval_steps: 200
+output_dir: outputs/twin               # local dry-run only; on Modal the adapter goes to the Volume
+gpu: A10G                              # Modal GPU for `twin train --remote`

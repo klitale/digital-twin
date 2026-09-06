@@ -299,21 +299,132 @@ def run(
 @app.command()
 def train(
     config: Annotated[Path, typer.Option("--config")] = Path("configs/train/full.yaml"),
-    dry_run: Annotated[bool, typer.Option("--dry-run", help="Tiny model, 2 steps, CPU.")] = False,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Tiny model, 5 examples, 2 steps.")
+    ] = False,
     remote: Annotated[bool, typer.Option("--remote", help="Run as a Modal GPU job.")] = False,
+    prepare_only: Annotated[
+        bool, typer.Option("--prepare-only", help="Only build data/train/train.jsonl.")
+    ] = False,
 ) -> None:
-    """Prepare the dataset and run LoRA fine-tuning."""
-    _not_yet("train", 6)
+    """Prepare train.jsonl from the training pairs and run LoRA fine-tuning."""
+    import os
+    import subprocess
+
+    from training import prepare_dataset as prep
+    from training.train_config import load_train_config
+
+    from twin.config import ConfigError, load_settings
+    from twin.core.prompts import PromptError, load_prompt
+    from twin.ingest.pipeline import load_processed
+
+    settings = load_settings()
+    try:
+        if dry_run and config == Path("configs/train/full.yaml"):
+            config = Path("configs/train/dry_run.yaml")
+        train_config = load_train_config(config)
+        if not settings.twin_name.strip():
+            raise ConfigError("TWIN_NAME is not set")
+        train_pairs, _holdout, manifest = load_processed(settings)
+        persona = load_prompt("persona_train_v1")
+        out_dir = settings.data_dir / "train"
+        train_manifest = prep.prepare_dataset(
+            train_pairs,
+            persona,
+            settings.twin_name,
+            prep.load_qwen_encoder(),
+            out_dir,
+            manifest.dataset_version,
+            max_seq_length=train_config.max_seq_length,
+        )
+    except (ConfigError, PromptError, OSError, ValueError) as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"train.jsonl: {out_dir / prep.TRAIN_FILE}")
+    typer.echo(train_manifest.model_dump_json(indent=2))
+    if prepare_only:
+        return
+
+    dataset = out_dir / prep.TRAIN_FILE
+    if remote:
+        if not (settings.modal_token_id and settings.modal_token_secret):
+            typer.echo("error: MODAL_TOKEN_ID / MODAL_TOKEN_SECRET are not set", err=True)
+            raise typer.Exit(code=1)
+        env = {
+            **os.environ,
+            "MODAL_TOKEN_ID": settings.modal_token_id.get_secret_value(),
+            "MODAL_TOKEN_SECRET": settings.modal_token_secret.get_secret_value(),
+            "TWIN_TRAIN_GPU": "T4" if dry_run else train_config.gpu,
+        }
+        cmd = [
+            "modal",
+            "run",
+            "training/train_modal.py",
+            "--config",
+            str(config),
+            "--dataset",
+            str(dataset),
+        ]
+        if dry_run:
+            cmd.append("--dry-run")
+        typer.echo("launching: " + " ".join(cmd), err=True)
+        raise typer.Exit(code=subprocess.call(cmd, env=env))
+
+    try:
+        import torch  # noqa: F401
+    except ImportError as exc:
+        typer.echo(
+            "torch is not installed in this environment. For the CPU dry run use:\n"
+            "  uv run --with-requirements training/requirements-cpu.txt twin train --dry-run",
+            err=True,
+        )
+        raise typer.Exit(code=1) from exc
+    from training.train_lora import train as train_lora
+
+    summary = train_lora(train_config, dataset, Path(train_config.output_dir), dry_run=dry_run)
+    typer.echo(
+        f"trained {summary['steps']} step(s) on {summary['device']} via {summary['loader']}: "
+        f"loss {summary['train_loss']:.3f}, adapter {summary['adapter_dir']}"
+    )
 
 
 @app.command("smoke-test-model")
 def smoke_test_model(
     model: Annotated[
-        str, typer.Option("--model", help="Adapter name served by the Modal endpoint.")
-    ] = "base",
+        str | None, typer.Option("--model", help="Adapter name served by Modal (default FT_MODEL).")
+    ] = None,
+    message: Annotated[str, typer.Option("--message")] = "привет, ты где пропал?",
 ) -> None:
-    """Send one Russian message through the fine-tuned endpoint."""
-    _not_yet("smoke-test-model", 6)
+    """Send one Russian message through the fine-tuned endpoint and time it."""
+    from twin.config import ConfigError, load_settings
+    from twin.core.factory import build_finetuned_llm
+    from twin.core.llm_client import LLMError
+    from twin.core.prompts import load_prompt
+
+    settings = load_settings()
+    try:
+        llm = build_finetuned_llm(settings)
+        llm.model = model or settings.ft_model
+        llm._client = llm._client.with_options(timeout=20 * 60)  # cold starts take minutes
+        template = load_prompt("persona_train_v1")
+        system, _ = template.render(name=settings.twin_name or "Он", context="")
+        result = llm.chat(
+            [
+                {"role": "system", "content": system},
+                {"role": "user", "content": f"Собеседник: {message}"},
+            ],
+            temperature=0.7,
+            max_tokens=120,
+        )
+    except (ConfigError, LLMError) as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    cold = result.latency_ms > 30_000
+    typer.echo(f"model {result.model}: {result.text}")
+    typer.echo(
+        f"latency {result.latency_ms} ms ({'cold start' if cold else 'warm'}), tokens "
+        f"{result.prompt_tokens}+{result.completion_tokens}"
+    )
 
 
 @app.command("eval")
