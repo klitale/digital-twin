@@ -399,6 +399,10 @@ class TwinBot:
             self.state.note_outgoing(chat_id, self._now(), "initiative")
             self.store.save_state(self.state)
             log.info("initiative.sent", chat_id=chat_id, kind=kind)
+        else:
+            # Telegram can refuse a first message (the chat is outside the business
+            # bot's Selected chats): the reply path never hits this, so say it loudly.
+            log.error("initiative.not_delivered", chat_id=chat_id, kind=kind, outcome=outcome)
         return outcome
 
     # --- delivery --------------------------------------------------------------------
