@@ -91,15 +91,17 @@ def main(
     list_only: bool = False,
     detach: bool = False,
     result: str = "",
+    wait: bool = False,
 ) -> None:
-    """``--detach`` spawns the job and prints its call id; ``--result <id>`` fetches it later."""
+    """``--detach`` spawns the job and prints its call id; ``--result <id>`` fetches it
+    later (``--wait`` blocks until the job finishes)."""
     if list_only:
         print(json.dumps(list_adapters.remote(), indent=2))
         return
     if result:
         call = modal.FunctionCall.from_id(result)
         try:
-            summary = call.get(timeout=0)
+            summary = call.get(timeout=None if wait else 0)
         except TimeoutError:
             print(json.dumps({"call_id": result, "status": "running"}))
             return

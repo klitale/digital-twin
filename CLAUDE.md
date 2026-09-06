@@ -7,7 +7,6 @@ interface, one evaluation harness with a blind judge. Public portfolio repo: no 
 - Work one phase at a time (table below). Before a phase: state goal, files, acceptance.
   After: `uv run pytest`, `uv run ruff check .`, phase checks, commit, report with
   caveats, then stop and wait for approval. Never start the next phase silently.
-- Never hide failing tests, data anomalies or unsupported assumptions.
 - Decisions on architecture, data validity, eval correctness or Telegram safety go into
   the phase report, never into a silent default.
 - `/systematic-debugging` before fixing failures; `/analyze` before quoting numbers;
