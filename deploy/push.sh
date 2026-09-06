@@ -39,6 +39,7 @@ rsync -az --delete -e "$RSYNC_SSH" \
   --exclude '.git' --exclude '.venv' --exclude 'data' --exclude '.env' --exclude '.env.*' \
   --exclude '.cache' --exclude '__pycache__' --exclude '.pytest_cache' --exclude '.ruff_cache' \
   --exclude '.coverage' --exclude 'deploy/hosts.yaml' --exclude '.claude' \
+  --exclude '.local' --exclude 'outputs' \
   "$HERE/" "$TARGET:$DIR/"
 
 if [ "$WITH_ENV" = 1 ]; then

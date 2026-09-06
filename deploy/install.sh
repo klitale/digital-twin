@@ -50,7 +50,10 @@ if [ "$ROLE" != "jobs" ]; then
 fi
 
 # --- environment ----------------------------------------------------------------------
-sync_cmd="cd '$DIR' && UV_CACHE_DIR='$DIR/.cache/uv' uv sync --no-dev --frozen && uv cache clean --quiet"
+# A uv-managed interpreter lives under $DIR/.local; if it is broken (a push once deleted
+# files there), reinstall it instead of failing in `uv sync`.
+repair_cmd="cd '$DIR' && if [ -L .venv/bin/python ] || [ -e .venv/bin/python ]; then .venv/bin/python -c 'import sysconfig' >/dev/null 2>&1 || uv python install --reinstall 3.11; fi"
+sync_cmd="$repair_cmd && UV_CACHE_DIR='$DIR/.cache/uv' uv sync --no-dev --frozen && uv cache clean --quiet"
 log "uv sync --no-dev (as $SERVICE_USER)"
 if [ "$ROLE" = "jobs" ]; then
   bash -c "$sync_cmd"
