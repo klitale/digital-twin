@@ -1,0 +1,11 @@
+# Evaluation on the holdout sample (pairs with eval_sample=true). Same judge config for
+# every mode; the judge never sees which mode produced the candidate.
+version: 1
+judge:
+  prompt: judge_v1
+  temperature: 0.0
+  max_tokens: 500
+generation:
+  temperature: 0.8
+  k: 8
+limit: null            # cap the number of pairs (debugging); null = the whole sample

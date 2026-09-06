@@ -431,21 +431,137 @@ def smoke_test_model(
 def eval_(
     mode: Annotated[Mode, typer.Option("--mode")] = Mode.RAG,
     config: Annotated[Path, typer.Option("--config")] = Path("configs/eval/default.yaml"),
+    limit: Annotated[int | None, typer.Option("--limit", help="Evaluate only N pairs.")] = None,
 ) -> None:
-    """Generate and judge every holdout pair for one mode."""
-    _not_yet("eval", 7)
+    """Generate and judge every holdout pair for one mode; writes data/eval/<run>.json."""
+    from twin.config import ConfigError, load_settings
+    from twin.core.factory import build_backend, build_retriever
+    from twin.core.llm_client import LLMClient, LLMError
+    from twin.core.prompts import PromptError, load_prompt
+    from twin.core.vector_store import IndexMismatchError
+    from twin.eval.harness import (
+        AuditingRetriever,
+        LeakageError,
+        load_eval_config,
+        run_eval,
+        write_run,
+    )
+    from twin.eval.judge import Judge
+    from twin.ingest.pipeline import load_processed
+
+    settings = load_settings()
+    try:
+        eval_config = load_eval_config(config)
+        if limit is not None:
+            eval_config = eval_config.model_copy(update={"limit": limit})
+        settings.require_judge()
+        if not settings.twin_name.strip():
+            raise ConfigError("TWIN_NAME is not set")
+        _train, holdout, manifest = load_processed(settings)
+        retriever = AuditingRetriever(build_retriever(settings, eval_config.generation.k))
+        gateway = None
+        if mode is Mode.RAG:
+            settings.require_llm()
+            gateway = LLMClient(
+                base_url=settings.llm_base_url,
+                api_key=settings.llm_api_key,  # type: ignore[arg-type]
+                model=settings.llm_model,
+                temperature=eval_config.generation.temperature,
+            )
+        backend = build_backend(settings, mode, retriever=retriever, llm=gateway)  # type: ignore[arg-type]
+        judge = Judge(
+            LLMClient(
+                base_url=settings.judge_base_url,
+                api_key=settings.judge_api_key_effective,  # type: ignore[arg-type]
+                model=settings.judge_model,
+                temperature=eval_config.judge.temperature,
+            ),
+            load_prompt(eval_config.judge.prompt),
+            settings.twin_name,
+            temperature=eval_config.judge.temperature,
+            max_tokens=eval_config.judge.max_tokens,
+        )
+        holdout_ids = {p.pair_id for p in holdout}
+
+        def progress(done: int, total: int) -> None:
+            typer.echo(f"\r{done}/{total}", nl=False, err=True)
+
+        run = run_eval(
+            holdout,
+            holdout_ids,
+            backend,
+            retriever,
+            judge,
+            eval_config,
+            manifest.dataset_version,
+            manifest.messages_dataset_version,
+            progress=progress,
+        )
+        typer.echo("", err=True)
+        path = write_run(run, settings.data_dir / "eval")
+    except (
+        ConfigError,
+        PromptError,
+        IndexMismatchError,
+        LeakageError,
+        LLMError,
+        OSError,
+        ValueError,
+    ) as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    s = run.summary
+    typer.echo(f"run: {path}")
+    typer.echo(
+        f"{run.metadata.mode} · {run.metadata.model} · {run.metadata.prompt_version}: n={s.n}, "
+        f"judged={s.judged}, silent={s.silent}, fallbacks={s.fallbacks}, errors={s.errors}, "
+        f"overall={s.overall}, means={s.means}, latency p50 {s.latency_ms_p50} ms"
+    )
 
 
 @app.command()
-def compare() -> None:
-    """Compare evaluation runs in a table."""
-    _not_yet("compare", 7)
+def compare(
+    baseline: Annotated[str, typer.Option("--baseline", help="Mode used as the baseline.")] = "rag",
+) -> None:
+    """Compare evaluation runs in a table (also written to data/eval/compare.md)."""
+    from twin.config import load_settings
+    from twin.eval.compare import compare_runs, render_markdown
+    from twin.eval.harness import list_runs, read_run
+
+    settings = load_settings()
+    paths = list_runs(settings.data_dir / "eval")
+    if not paths:
+        typer.echo("error: no evaluation runs in data/eval; run `twin eval` first", err=True)
+        raise typer.Exit(code=1)
+    text = render_markdown(compare_runs([read_run(p) for p in paths], baseline))
+    (settings.data_dir / "eval" / "compare.md").write_text(text, encoding="utf-8")
+    typer.echo(text)
 
 
 @app.command()
-def report() -> None:
+def report(
+    out: Annotated[
+        Path | None, typer.Option("--out", help="Default: data/eval/report.html")
+    ] = None,
+    baseline: Annotated[str, typer.Option("--baseline")] = "rag",
+) -> None:
     """Render the self-contained HTML evaluation report."""
-    _not_yet("report", 7)
+    from twin.config import load_settings
+    from twin.eval.harness import list_runs, read_run
+    from twin.eval.report import render_report
+
+    settings = load_settings()
+    paths = list_runs(settings.data_dir / "eval")
+    if not paths:
+        typer.echo("error: no evaluation runs in data/eval; run `twin eval` first", err=True)
+        raise typer.Exit(code=1)
+    target = out or settings.data_dir / "eval" / "report.html"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        render_report([read_run(p) for p in paths], settings.twin_name or "Он", baseline),
+        encoding="utf-8",
+    )
+    typer.echo(f"report: {target} ({len(paths)} run(s))")
 
 
 if __name__ == "__main__":

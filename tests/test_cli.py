@@ -35,7 +35,7 @@ def test_version() -> None:
     assert result.output.strip() == __version__
 
 
-def test_unimplemented_command_exits_with_code_2() -> None:
+def test_report_without_runs_fails_loudly() -> None:
     result = runner.invoke(app, ["report"])
-    assert result.exit_code == 2
-    assert "Phase" in result.output
+    assert result.exit_code == 1
+    assert "no evaluation runs" in result.output

@@ -66,6 +66,8 @@ ignore = ["RUF001", "RUF002", "RUF003"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101"]
+"src/twin/eval/report.py" = ["E501"]  # inline CSS/HTML templates
+"tests/test_eval.py" = ["E501"]  # JSON fixtures inline
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

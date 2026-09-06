@@ -23,8 +23,8 @@ interface, one evaluation harness with a blind judge. Public portfolio repo: no 
 | 3 | Style profile | done |
 | 4 | Index, retrieval, prompt, RAG backend, `twin chat` | done |
 | 5 | Business bot + VPS inventory/deploy | done |
-| 6 | Fine-tuning pipeline + Modal serving + backends | next |
-| 7 | Eval harness, judge, compare, HTML report | |
+| 6 | Fine-tuning pipeline + Modal serving + backends | done |
+| 7 | Eval harness, judge, compare, HTML report | in progress |
 | 8 | Project skills, README | |
 | 9 | Real fine-tune and three-mode comparison | |
 

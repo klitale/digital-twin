@@ -28,10 +28,11 @@ MAX_MODEL_LEN = 4096
 app = modal.App("digital-twin-serve")
 volume = modal.Volume.from_name(VOLUME_NAME, create_if_missing=True)
 hf_cache = modal.Volume.from_name("digital-twin-hf-cache", create_if_missing=True)
+# vLLM needs the CUDA toolkit (nvcc) at runtime for its JIT kernels: a devel base image.
 image = (
-    modal.Image.debian_slim(python_version="3.12")
-    .pip_install("vllm", "huggingface_hub[hf_transfer]")
-    .env({"HF_HUB_ENABLE_HF_TRANSFER": "1", "VLLM_ALLOW_RUNTIME_LORA_UPDATING": "0"})
+    modal.Image.from_registry("nvidia/cuda:12.8.1-devel-ubuntu22.04", add_python="3.12")
+    .pip_install("vllm", "huggingface_hub")
+    .env({"VLLM_ALLOW_RUNTIME_LORA_UPDATING": "0", "HF_HUB_DISABLE_PROGRESS_BARS": "1"})
 )
 
 
