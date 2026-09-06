@@ -108,7 +108,9 @@ Control commands work only in the direct chat with the bot and only from
 A message written by the account owner in a connected chat pauses the bot there for
 `PAUSE_MINUTES` (if Telegram delivers such messages; otherwise `/pause`).
 
-**Initiative** (`src/twin/bot/initiative.py`) is off by default. The defaults come from
+**Initiative** (`src/twin/bot/initiative.py`) is off by default. Because the opener fires
+on only a quarter of days, `/poke <user_id>` is the way to see one on demand, and
+`deploy/state.sh <host>` prints the switches, pauses and today's plan. The defaults come from
 the export, where the twin started about a quarter of all conversations, nearly all of
 them late morning. Decisions are pure functions of the persisted state, a clock and a
 seeded rng (one decision per reply, one opener plan per local day, never twice), the

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from twin.bot.state import BotState
@@ -75,6 +75,22 @@ def local_midnight(now: int, tz: str) -> tuple[str, int]:
     return local.date().isoformat(), int(midnight.timestamp())
 
 
+def next_window_day(now: int, tz: str, window_end_s: int) -> tuple[str, int]:
+    """The next day whose opener window has not closed yet, as (YYYY-MM-DD, midnight ts).
+
+    Planning lazily meant that a bot started after the window rolled a time already in
+    the past and immediately marked the day as missed, so it could never write first
+    until the next morning. Roll for tomorrow instead.
+    """
+    day, midnight = local_midnight(now, tz)
+    if now < midnight + window_end_s:
+        return day, midnight
+    zone = ZoneInfo(tz)
+    tomorrow = datetime.fromtimestamp(midnight, tz=zone).date() + timedelta(days=1)
+    start = datetime.combine(tomorrow, time(), tzinfo=zone)
+    return tomorrow.isoformat(), int(start.timestamp())
+
+
 def decide_followup(
     state: BotState, chat_id: int, now: int, cfg: InitiativeConfig, rng: random.Random
 ) -> Decision:
@@ -107,13 +123,14 @@ def plan_opener(
 ) -> dict[str, object]:
     """Ensure today's plan exists for the chat and return it."""
     key = str(chat_id)
-    day, midnight = local_midnight(now, cfg.tz)
+    today, _ = local_midnight(now, cfg.tz)
     plan = state.opener_plan.get(key)
-    if plan is not None and plan.get("day") == day:
-        return plan
+    if plan is not None and str(plan.get("day", "")) >= today:
+        return plan  # today's plan, or one already rolled for tomorrow
+    lo, hi = cfg.opener_window_s
+    day, midnight = next_window_day(now, cfg.tz, hi)
     at: int | None = None
     if rng.random() < cfg.opener_daily_probability:
-        lo, hi = cfg.opener_window_s
         at = midnight + rng.randint(lo, hi - 1)
     plan = {"day": day, "at": at, "done": False}
     state.opener_plan[key] = plan
@@ -130,7 +147,7 @@ def decide_opener(
     if plan.get("done"):
         return Decision(None, "done_today")
     if not isinstance(at, int):
-        return Decision(None, "no_opener_today")
+        return Decision(None, "no_opener_today")  # the daily roll said no; retry tomorrow
     if now < at:
         return Decision(None, "not_yet")
     if now - at > OPENER_GRACE_S:
@@ -167,7 +184,10 @@ def describe_plan(state: BotState, chat_id: int, now: int, tz: str) -> str:
     if not isinstance(at, int):
         return "no opener today"
     local = datetime.fromtimestamp(at, tz=ZoneInfo(tz))
-    return "today at " + local.strftime("%H:%M") + (" (due)" if at <= now else "")
+    when = local.strftime("%H:%M")
+    if str(plan.get("day", "")) != local_midnight(now, tz)[0]:
+        return f"{plan.get('day')} at {when}"
+    return "today at " + when + (" (due)" if at <= now else "")
 
 
 def window_text(cfg: InitiativeConfig) -> str:

@@ -186,8 +186,10 @@ class TwinBot:
         parsed = parse_command(text)
         if parsed is not None and parsed[0] == "poke" and self._poke_args(parsed[1]):
             chat_id, kind = self._poke_args(parsed[1])  # type: ignore[misc]
-            log.info("control", user_id=user.id, command=["poke", kind])
             outcome = await self.poke(chat_id, kind)
+            log.info(
+                "initiative.poke", user_id=user.id, chat_id=chat_id, kind=kind, outcome=outcome
+            )
             reply = f"poke {kind} -> {outcome}"
             await self.bot.send_message(chat_id=message.chat.id, text=reply)
             return reply
@@ -330,10 +332,22 @@ class TwinBot:
         return results
 
     async def initiative_loop(self) -> None:
-        """Background task next to polling; never raises."""
+        """Background task next to polling; never raises.
+
+        A tick is logged only when the picture changes (the first one always is), so the
+        log shows why nothing is being sent without a line every minute.
+        """
+        previous: dict[int, str] | None = None
         while True:
             try:
-                await self.initiative_tick()
+                results = await self.initiative_tick()
+                if results != previous:
+                    log.info(
+                        "initiative.tick",
+                        results={str(k): v for k, v in results.items()},
+                        plans=self.initiative_status(),
+                    )
+                    previous = results
             except Exception as exc:  # the loop must survive a bad tick
                 log.error("initiative.tick_failed", error=str(exc))
             await self.sleep(float(self.settings.initiative_tick_seconds))

@@ -54,7 +54,9 @@ Memory: `systemctl show twin -p MemoryCurrent`; measured at the first deploy (Ch
 index of 6.2k pairs loaded, embeddings via the gateway): about 230 MB.
 
 Service control from the workstation: `deploy/service.sh <host> start|stop|restart|disable|enable`;
-`deploy/status.sh <host> [lines]` shows the unit, memory, Telegram reachability and the log tail.
+`deploy/status.sh <host> [lines]` shows the unit, memory, Telegram reachability and the log tail;
+`deploy/state.sh <host>` prints the runtime state (switches, initiative features, pauses,
+today's opener plan, last activity per chat) without opening an ssh session by hand.
 
 ## Rollback
 

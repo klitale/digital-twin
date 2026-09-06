@@ -29,6 +29,7 @@ from twin.bot.initiative import (
     decide,
     decide_followup,
     decide_opener,
+    next_window_day,
     parse_range,
     plan_opener,
 )
@@ -130,6 +131,26 @@ def test_opener_planned_once_per_local_day_inside_window() -> None:
         state_with(), OTHER, NOON, cfg(opener_daily_probability=0.0), random.Random(0)
     )
     assert none["at"] is None
+
+
+def test_plan_after_the_window_rolls_to_tomorrow() -> None:
+    """A bot started after the window used to roll a time in the past and miss the day."""
+    c = cfg(opener_daily_probability=1.0)
+    evening = int(datetime(2026, 9, 7, 21, 0, tzinfo=ZoneInfo(TZ)).timestamp())
+    assert next_window_day(NOON, TZ, 14 * HOUR) == ("2026-09-07", NOON - 12 * HOUR)
+    day, midnight = next_window_day(evening, TZ, 14 * HOUR)
+    assert day == "2026-09-08"
+    s = state_with(features=["opener"])
+    plan = plan_opener(s, PARTNER, evening, c, random.Random(3))
+    assert plan["day"] == "2026-09-08"
+    assert isinstance(plan["at"], int) and plan["at"] > evening
+    local = datetime.fromtimestamp(plan["at"], tz=ZoneInfo(TZ))
+    assert 10 <= local.hour < 14
+    # the plan survives the rest of the evening instead of being re-rolled or missed
+    assert decide_opener(s, PARTNER, evening + HOUR, c, random.Random(0)).reason == "not_yet"
+    assert plan_opener(s, PARTNER, evening + HOUR, c, random.Random(0)) is plan
+    assert plan_opener(s, PARTNER, midnight + 9 * HOUR, c, random.Random(0)) is plan
+    assert decide_opener(s, PARTNER, plan["at"] + 60, c, random.Random(0)).kind == "opener"
 
 
 def test_opener_rules() -> None:
