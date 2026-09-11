@@ -15,6 +15,8 @@ class MemoryTurn(BaseModel):
     by_bot: bool = False
     """True when the bot generated this turn. Learning never reads such turns, so the
     twin cannot fold its own inventions back into what it 'knows' (see core/facts.py)."""
+    flagged: bool = False
+    """A provocation (core/guard.py): kept as a short stub for context, never learned from."""
 
 
 class ConversationMemory:

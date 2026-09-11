@@ -30,6 +30,10 @@ DEFAULT_ASSISTANT_MARKERS: tuple[str, ...] = (
 )
 
 
+_LIST_ITEM = re.compile(r"^\s*(?:\d{1,3}[.)]|[-•*])\s+\S")
+MAX_LIST_ITEMS = 3  # a numbered or bulleted list this long is a service answering, not a person
+
+
 @dataclass(frozen=True)
 class ValidationResult:
     ok: bool
@@ -59,6 +63,9 @@ def validate_reply(
         return ValidationResult(False, cleaned, "empty")
     if len(cleaned) > max_chars:
         return ValidationResult(False, cleaned, f"too_long:{len(cleaned)}>{max_chars}")
+    items = sum(1 for line in cleaned.splitlines() if _LIST_ITEM.match(line))
+    if items >= MAX_LIST_ITEMS:
+        return ValidationResult(False, cleaned, f"list_output:{items}")
     lowered = cleaned.lower()
     for marker in markers:
         if marker.lower() in lowered:

@@ -18,6 +18,8 @@ from pydantic import BaseModel, Field
 CONNECTION_FILE = "connection.json"
 STATE_FILE = "bot_state.json"
 REMEMBERED_MESSAGE_IDS = 200
+HOUR_S = 3600
+DAY_S = 24 * HOUR_S
 
 
 def _atomic_write(path: Path, text: str) -> None:
@@ -73,6 +75,12 @@ class BotState(BaseModel):
         default_factory=dict,
         description="Telegram refuses a first message there (BUSINESS_PEER_USAGE_MISSING)",
     )
+    generation_ts: dict[str, list[int]] = Field(
+        default_factory=dict, description="chat_id -> reply generations in the last 24 h (guard)"
+    )
+    provocation_ts: dict[str, list[int]] = Field(
+        default_factory=dict, description="chat_id -> provocations in the last hour (guard)"
+    )
 
     # --- queries -----------------------------------------------------------------
 
@@ -95,6 +103,12 @@ class BotState(BaseModel):
 
     def is_peer_blocked(self, chat_id: int) -> bool:
         return self.peer_write_blocked.get(str(chat_id), False)
+
+    def generations_since(self, chat_id: int, since: int) -> int:
+        return sum(1 for ts in self.generation_ts.get(str(chat_id), []) if ts > since)
+
+    def provocations_since(self, chat_id: int, since: int) -> int:
+        return sum(1 for ts in self.provocation_ts.get(str(chat_id), []) if ts > since)
 
     def last_activity(self, chat_id: int) -> int | None:
         key = str(chat_id)
@@ -133,6 +147,19 @@ class BotState(BaseModel):
         key = str(chat_id)
         self.human_turns_since_facts[key] = self.human_turns_since_facts.get(key, 0) + 1
         return self.human_turns_since_facts[key]
+
+    def note_generation(self, chat_id: int, ts: int) -> None:
+        """One model call spent on a reply; only the last day is kept."""
+        key = str(chat_id)
+        self.generation_ts[key] = [t for t in self.generation_ts.get(key, []) if t > ts - DAY_S]
+        self.generation_ts[key].append(ts)
+
+    def note_provocation(self, chat_id: int, ts: int) -> int:
+        """Record one provocation; returns how many arrived in the last hour, this included."""
+        key = str(chat_id)
+        self.provocation_ts[key] = [t for t in self.provocation_ts.get(key, []) if t > ts - HOUR_S]
+        self.provocation_ts[key].append(ts)
+        return len(self.provocation_ts[key])
 
     def note_facts_updated(self, chat_id: int, ts: int) -> None:
         key = str(chat_id)

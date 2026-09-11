@@ -57,6 +57,7 @@ class ControlContext:
     now: int
     aggression: Aggression | None = None
     initiative_status: str = ""
+    guard_status: str = ""
 
 
 def parse_command(text: str) -> tuple[str, list[str]] | None:
@@ -134,6 +135,8 @@ def status_text(ctx: ControlContext, cli_dry_run: bool = False) -> str:
         lines.append("нельзя написать первым (Telegram): " + ", ".join(blocked))
     if ctx.initiative_status:
         lines.append(ctx.initiative_status)
+    if ctx.guard_status:
+        lines.append(ctx.guard_status)
     return "\n".join(lines)
 
 

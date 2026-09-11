@@ -32,8 +32,10 @@ class FakeOpenAIServer:
         fail_times: int = 0,
         fail_status: int = 500,
         embedding_dim: int = 8,
+        finish_reason: str = "stop",
     ) -> None:
         self.reply = reply
+        self.finish_reason = finish_reason
         self.fail_times = fail_times
         self.fail_status = fail_status
         self.embedding_dim = embedding_dim
@@ -73,7 +75,7 @@ class FakeOpenAIServer:
                                 {
                                     "index": 0,
                                     "message": {"role": "assistant", "content": text},
-                                    "finish_reason": "stop",
+                                    "finish_reason": outer.finish_reason,
                                 }
                             ],
                             "usage": {

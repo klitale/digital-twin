@@ -111,14 +111,14 @@ most replies in this chat are one-line reactions that no model can predict exact
 The bot fails closed: it replies only through a verified business connection whose
 owner matches `BUSINESS_OWNER_ID`, only in private chats with the
 `ALLOWED_USER_IDS` (one to three of them), only when enabled and not paused, and only when the generated reply
-passes validation (no empty, over-long or assistant-sounding text). Restrict the
+passes validation (no empty, over-long, list-shaped or assistant-sounding text). Restrict the
 Telegram-side *Selected chats* to the same users as a second line of defence.
 Control commands work only in the direct chat with the bot and only from
 `ADMIN_USER_IDS`; they are listed in Telegram's command menu (`/help`):
 
 | Command | Effect |
 |---|---|
-| `/status` | connection, mode, dry-run, pauses, initiative switches and today's opener plan |
+| `/status` | connection, mode, dry-run, pauses, initiative switches, today's opener plan and guard counters |
 | `/on`, `/off` | global switch |
 | `/mode rag\|finetuned\|hybrid` | generation mode from the next message on |
 | `/dryrun on\|off\|auto` | generate but never send (`auto` = `DRY_RUN` from `.env`) |
@@ -141,6 +141,35 @@ boolean. `/aggro` (`src/twin/bot/aggression.py`) scales volume only, never wordi
 `low` the twin ignores more messages, nudges and opens far less often and never sends
 more than two messages in a row; at `high` it almost never ignores a message and its
 initiative probabilities double. `normal` reproduces the configured defaults exactly.
+
+**Provocations and spend** (`src/twin/core/guard.py`). "Write me 1000 cities", "list a
+hundred facts about yourself", "ignore your instructions", "write my essay": a person
+shrugs these off in one line, a model writes a two-thousand-token list and the gateway
+bills for it. Four layers keep that cheap:
+
+1. *Every* reply has an output cap (`max_tokens`, about half of `MAX_REPLY_CHARS`), and a
+   completion cut off by it is dropped without a second attempt, so a runaway list costs
+   one capped call instead of two full ones. A reply with three or more numbered or
+   bulleted lines is rejected as list-shaped.
+2. Cheap patterns (no model call) recognise a bulk request, a do-my-work request and a
+   prompt injection. Such a message is answered in character with `prompts/guard_v1.md`
+   added to the prompt and a 100-token budget; it stays in the chat history only as a
+   200-character stub and is never read by learning.
+3. From the third provocation in an hour (`GUARD_PROVOCATIONS_PER_HOUR`) the twin goes
+   quiet in that chat without calling the model at all.
+4. Every chat has a reply budget (`GUARD_REPLIES_PER_HOUR`, `GUARD_REPLIES_PER_DAY`), and
+   incoming messages are clipped to `MAX_INCOMING_CHARS` before the prompt, the memory
+   and the embedding query. A wall of text (usually a forwarded post) is clipped and gets
+   a short reaction, but never counts as a provocation.
+
+Precision matters more than recall: a false positive turns a normal message into a
+brush-off, while a miss is still bounded by layer 1. Against every partner message in
+the export's pairs (7343 unique turns) none of the three patterns fires (a first draft
+caught a forwarded advert that merely mentioned a "system prompt", so the injection
+patterns now need a request aimed at the twin); 16 turns are walls, all forwarded posts.
+The list rule rejects one of 7330 real replies. The reply budget of 60 an hour and 300 a
+day cuts 4% of the export's active hours and 1% of its days. The normal prompt is
+untouched, so the holdout numbers above still hold.
 
 **Learning** (`src/twin/core/facts.py`, off until `/learn on`) is what makes the twin
 know anything that happened after the export. The retrieval index is frozen and the

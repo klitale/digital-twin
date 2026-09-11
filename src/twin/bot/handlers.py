@@ -51,10 +51,11 @@ from twin.bot.initiative import (
     describe_plan,
     window_text,
 )
-from twin.bot.state import BotState, StateStore
+from twin.bot.state import DAY_S, HOUR_S, BotState, StateStore
 from twin.config import ConfigError, Mode, Settings
 from twin.core.backends import GenerationBackend, GenerationRequest
 from twin.core.facts import FactSheet, FactStore, human_turns, update_sheet
+from twin.core.guard import FLAGGED_MEMORY_CHARS, PROVOCATIONS, classify, clip_incoming
 from twin.core.llm_client import LLMClient
 from twin.core.memory import ConversationMemory, MemoryTurn
 from twin.core.prompts import PromptTemplate
@@ -238,6 +239,35 @@ class TwinBot:
         )
         return f"окно опенера {window_text(self.initiative_cfg)}; планы: {plans or 'нет'}"
 
+    def _guard_gate(self, chat_id: int, now: int, kind: str | None) -> str | None:
+        """Bound what one partner can spend. Provocations past the hourly count, and any
+        message past the reply budget, cost nothing: the twin just stays quiet."""
+        s = self.settings
+        if kind in PROVOCATIONS and self.state.note_provocation(chat_id, now) > (
+            s.guard_provocations_per_hour
+        ):
+            return "provocation_ignored"
+        if self.state.generations_since(chat_id, now - HOUR_S) >= s.guard_replies_per_hour:
+            return "rate_limited"
+        if self.state.generations_since(chat_id, now - DAY_S) >= s.guard_replies_per_day:
+            return "rate_limited"
+        return None
+
+    def guard_status(self) -> str:
+        now = self._now()
+        s = self.settings
+        chats = ", ".join(
+            f"{chat_id}: {self.state.generations_since(chat_id, now - HOUR_S)}/ч, "
+            f"{self.state.generations_since(chat_id, now - DAY_S)}/сут, "
+            f"провокаций за час {self.state.provocations_since(chat_id, now - HOUR_S)}"
+            for chat_id in s.allowed_user_ids
+        )
+        return (
+            f"защита: до {s.guard_replies_per_hour} ответов в час и {s.guard_replies_per_day} "
+            f"в сутки на чат, провокаций в час без игнора {s.guard_provocations_per_hour}; "
+            f"сейчас {chats or 'нет чатов'}"
+        )
+
     def startup_report(self) -> str:
         status = self.connection_status()
         lines = [
@@ -308,6 +338,7 @@ class TwinBot:
                 now=self._now(),
                 aggression=self.aggression(),
                 initiative_status=self.initiative_status(),
+                guard_status=self.guard_status(),
             ),
             self.cli_dry_run,
         )
@@ -390,11 +421,26 @@ class TwinBot:
         text = message.text
         if not text:
             return "non_text"
+        kind = classify(text, self.settings.max_incoming_chars)
+        text = clip_incoming(text, self.settings.max_incoming_chars)
         partner = user.id
         history = self.memory.turns(partner)
         previous = next((t.text for t in reversed(history) if not t.is_me), None)
-        self.memory.append(partner, MemoryTurn(is_me=False, text=text, ts=now))
-        self._note_human_turn(chat.id)
+        # a provocation stays in the history only as a stub and is never learned from
+        stored = clip_incoming(text, FLAGGED_MEMORY_CHARS) if kind else text
+        self.memory.append(
+            partner, MemoryTurn(is_me=False, text=stored, ts=now, flagged=kind is not None)
+        )
+        if kind is None:
+            self._note_human_turn(chat.id)
+        blocked = self._guard_gate(chat.id, now, kind)
+        self.store.save_state(self.state)
+        if kind is not None or blocked is not None:
+            log.info(
+                "guard", chat_id=chat.id, message_id=message.message_id, kind=kind, outcome=blocked
+            )
+        if blocked is not None:
+            return blocked
         rate = self.skip_rate if self.skip_rate is not None else self.aggression().skip_rate
         if should_skip(text, self.rng, rate):
             log.info("business_message.skipped", chat_id=chat.id, message_id=message.message_id)
@@ -413,7 +459,10 @@ class TwinBot:
             history=history,
             dry_run=self.dry_run,
             facts=self.facts_for(partner),
+            guard=kind,
         )
+        self.state.note_generation(chat.id, now)
+        self.store.save_state(self.state)
         try:
             result = await asyncio.to_thread(backend.generate, request)
         except Exception as exc:  # retrieval or the gateway is down; stay silent, say why
@@ -505,7 +554,7 @@ class TwinBot:
         if status.record is None:
             return "no_connection"
         history = self.memory.turns(chat_id)
-        partner_texts = [t.text for t in history if not t.is_me]
+        partner_texts = [t.text for t in history if not t.is_me and not t.flagged]
         query = partner_texts[-1] if partner_texts else (history[-1].text if history else "")
         try:
             backend = self.initiative_backend()

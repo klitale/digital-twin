@@ -28,6 +28,7 @@ interface, one evaluation harness with a blind judge. Public portfolio repo: no 
 | 9 | Real fine-tune and three-mode comparison | done: rag 3.22 > finetuned 2.83 > hybrid 2.73 (README) |
 | 10 | Initiative: follow-ups and openers as opt-in features, command menu | done |
 | 11 | Learning: fact sheets from live chats (`/learn`), never from bot output | done |
+| 12 | Guard: provocations answered in one line, output caps, per-chat reply budget | done |
 
 ## Stack and layout
 Python 3.11, `uv`, `ruff`, `pytest`, `typer`, `pydantic-settings`, `structlog`, `aiogram` 3
@@ -40,7 +41,7 @@ src/twin/  config.py (Settings, require_*), cli.py, logsetup.py; eval/ (harness 
            core/schemas.py (contracts), llm_client.py (one client, reasoning off per
            model family), prompts.py (versioned prompts/*.md), embeddings.py,
            vector_store.py (Chroma + manifest), retriever.py, prompt.py, backends.py,
-           validate.py, memory.py, facts.py (sheets from human turns only), factory.py
+           validate.py, memory.py, facts.py (human turns only), guard.py, factory.py
            bot/handlers.py (gates, autopause, delivery, initiative tick), state.py, app.py,
            business.py, control.py (commands + menu), initiative.py, aggression.py, humanize.py
 deploy/    inventory.sh, push.sh (rsync + install), install.sh <role>, sync_index.sh,
@@ -49,7 +50,6 @@ deploy/    inventory.sh, push.sh (rsync + install), install.sh <role>, sync_inde
            split.py (time tail + seeded eval sample, leakage asserts), profile_dataset.py,
            dataconfig.py (configs/data/*.yaml), pipeline.py (twin ingest), stats.py (5.4),
            style_profile.py (twin style-profile: 300 train replies + stats -> Russian rules)
-           bot/ eval/                          # added phase by phase
 scripts/privacy_check.py  tests/ (synthetic fixtures, fake_openai_server.py)
 prompts/<name>_v<N>.md  configs/data/default.yaml (min_date 2021, 15% tail)  training/ serving/
 ```

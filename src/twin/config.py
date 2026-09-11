@@ -128,6 +128,14 @@ class Settings(BaseSettings):
 
     # Limits and paths
     max_reply_chars: int = 600
+    # longer incoming messages are clipped before the prompt, the memory and the embedding
+    max_incoming_chars: int = 1000
+    # Guard (core/guard.py): per chat, model calls for replies; over the limit the twin is
+    # silent instead of spending quota. Provocations beyond the hourly count are ignored.
+    # 60/300 cut about 1% of the export's active days (p99 = 295 partner messages a day)
+    guard_replies_per_hour: int = 60
+    guard_replies_per_day: int = 300
+    guard_provocations_per_hour: int = 2
     data_dir: Path = Path("data")
     raw_export_path: Path | None = None
 

@@ -13,6 +13,7 @@ from typing import Any, Protocol
 
 from pydantic import BaseModel, Field
 
+from twin.core.guard import GUARD_MAX_CHARS, GUARD_MAX_TOKENS, apply_guard
 from twin.core.llm_client import LLMClient, LLMError
 from twin.core.memory import MemoryTurn
 from twin.core.prompt import (
@@ -43,6 +44,9 @@ class GenerationRequest(BaseModel):
     dry_run: bool = False
     intent: str = Field(default="reply", description="reply | followup | opener")
     facts: str = Field(default="", description="rendered fact sheet; empty = nothing known")
+    guard: str | None = Field(
+        default=None, description="provocation kind (core/guard.py); None = a normal message"
+    )
 
 
 class GenerationResult(BaseModel):
@@ -66,6 +70,13 @@ class GenerationBackend(Protocol):
     def generate(self, request: GenerationRequest) -> GenerationResult: ...
 
 
+def reply_token_budget(max_chars: int) -> int:
+    """Output cap for one reply. Russian runs at two to three characters per token, so a
+    reply that fits ``max_chars`` never reaches it, while a thousand-item list is cut off
+    early instead of being paid for in full and then rejected as too long."""
+    return max_chars // 2 + 16
+
+
 def generate_validated(
     llm: LLMClient,
     bundle: PromptBundle,
@@ -78,7 +89,12 @@ def generate_validated(
     retrieved_ids: list[str],
     request: GenerationRequest,
 ) -> GenerationResult:
-    """Call the model, validate, regenerate once, then stay silent."""
+    """Call the model, validate, regenerate once, then stay silent.
+
+    A provocation (``request.guard``) gets the brush-off rule and a one-line budget. A
+    completion cut off by ``max_tokens`` is never retried: the same prompt would run into
+    the same wall and cost the same again.
+    """
     started = time.perf_counter()
     rejected: list[str] = []
     raw_texts: list[str] = []
@@ -86,10 +102,18 @@ def generate_validated(
     error: str | None = None
     model = llm.model
     attempts = 0
+    messages, version = bundle.messages, bundle.version
+    if request.guard:
+        messages, guard_version = apply_guard(messages, request.guard, name)
+        version = f"{version}+{guard_version}"
+        max_reply_chars = min(max_reply_chars, GUARD_MAX_CHARS)
+        max_tokens = GUARD_MAX_TOKENS
+    else:
+        max_tokens = reply_token_budget(max_reply_chars)
     for attempt in range(1, MAX_ATTEMPTS + 1):
         attempts = attempt
         try:
-            result = llm.chat(bundle.messages, temperature=temperature)
+            result = llm.chat(messages, temperature=temperature, max_tokens=max_tokens)
         except LLMError as exc:
             error = str(exc)
             rejected.append("llm_error")
@@ -97,13 +121,20 @@ def generate_validated(
             break
         model = result.model
         raw_texts.append(result.text)
+        if result.finish_reason == "length":
+            rejected.append("truncated")
+            break
         verdict = validate_reply(result.text, max_reply_chars, markers, name)
         if verdict.ok:
             text = verdict.text
             break
         rejected.append(verdict.reason or "invalid")
     latency_ms = int((time.perf_counter() - started) * 1000)
-    params = {"temperature": temperature, "max_reply_chars": max_reply_chars}
+    params = {
+        "temperature": temperature,
+        "max_reply_chars": max_reply_chars,
+        "max_tokens": max_tokens,
+    }
     log.info(
         "generation",
         chat_id=request.chat_id,
@@ -111,7 +142,8 @@ def generate_validated(
         partner_id=request.partner_id,
         mode=mode,
         model=model,
-        prompt_version=bundle.version,
+        prompt_version=version,
+        guard=request.guard,
         retrieved_example_ids=retrieved_ids,
         params=params,
         latency_ms=latency_ms,
@@ -125,7 +157,7 @@ def generate_validated(
         text=text,
         mode=mode,
         model=model,
-        prompt_version=bundle.version,
+        prompt_version=version,
         retrieved_ids=retrieved_ids,
         params=params,
         latency_ms=latency_ms,

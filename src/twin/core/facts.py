@@ -77,8 +77,8 @@ class FactStore:
 
 
 def human_turns(turns: Sequence[MemoryTurn]) -> list[MemoryTurn]:
-    """Everything a person actually wrote; never what the bot generated."""
-    return [turn for turn in turns if not turn.by_bot]
+    """Everything a person actually wrote; never what the bot generated, never provocations."""
+    return [turn for turn in turns if not turn.by_bot and not turn.flagged]
 
 
 def parse_facts(text: str, now: int, limit: int = MAX_FACTS) -> list[Fact]:

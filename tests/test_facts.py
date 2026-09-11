@@ -46,6 +46,7 @@ class FakeLLM:
         class Result:
             text = self.answer
             model = "fake"
+            finish_reason = "stop"
 
         return Result()
 
