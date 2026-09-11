@@ -175,6 +175,29 @@ def test_rag_backend_with_knowledge_and_plan(tmp_path: Path) -> None:
     assert "поймали трёх щук" in system
 
 
+def test_content_refusal_retries_without_knowledge(tmp_path: Path) -> None:
+    emb = HashEmbeddings()
+    pairs_store = ChromaVectorStore(tmp_path / "chroma")
+    build_index(pairs_store, emb, PAIRS, "ds1")
+    refusal = "InternalError.Algo.DataInspectionFailed: Input text data may contain inappropriate"
+    with FakeOpenAIServer(
+        reply="норм", fail_times=1, fail_status=400, fail_message=refusal
+    ) as server:
+        backend = RagBackend(
+            llm=LLMClient(server.base_url, "k", model="fake/model", max_retries=0),
+            retriever=Retriever(pairs_store, emb, k=2),
+            template=load_prompt("rag_v7"),
+            name="Радомир",
+            style_profile="- коротко\n",
+            dossier="- Любимая тема: кот Барсик\n",
+        )
+        result = backend.generate(GenerationRequest(partner_id=1, text="как дела?", facts="- x"))
+    assert result.text == "норм" and result.rejected == ["content_refusal"]
+    first, second = (r["messages"][0]["content"] for r in server.requests)
+    assert "кот Барсик" in first and "- x" in first
+    assert "кот Барсик" not in second and "знает про этого собеседника" not in second
+
+
 # --- dossier ---------------------------------------------------------------------------------
 
 

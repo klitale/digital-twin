@@ -14,7 +14,7 @@ from typing import Any, Protocol
 from pydantic import BaseModel, Field
 
 from twin.core.guard import GUARD_MAX_CHARS, GUARD_MAX_TOKENS, apply_guard
-from twin.core.llm_client import LLMClient, LLMError
+from twin.core.llm_client import LLMClient, LLMError, is_content_refusal
 from twin.core.memory import MemoryTurn
 from twin.core.prompt import (
     PromptBundle,
@@ -223,6 +223,30 @@ class RagBackend:
             # empty section measurably cost 0.08 overall on the holdout.
             facts = request.facts.strip()
             template = self.facts_template if facts and self.facts_template else self.template
+        result = self._generate(template, examples, request, request.facts, statements)
+        knowledge_shown = bool(self.dossier.strip() or statements or request.facts.strip())
+        if uses_knowledge(template) and knowledge_shown and is_content_refusal(result.error or ""):
+            # The provider's content filter refused the prompt; the dossier (drugs, money,
+            # relationships) is the usual trigger. Answer without it rather than go silent.
+            log.warning("generation.refused_with_knowledge", chat_id=request.chat_id)
+            retry = self._generate(template, examples, request, "", [], dossier="")
+            return retry.model_copy(
+                update={
+                    "rejected": ["content_refusal", *retry.rejected],
+                    "attempts": result.attempts + retry.attempts,
+                }
+            )
+        return result
+
+    def _generate(
+        self,
+        template: PromptTemplate,
+        examples: list[RetrievedExample],
+        request: GenerationRequest,
+        facts: str,
+        statements: list[RetrievedExample],
+        dossier: str | None = None,
+    ) -> GenerationResult:
         bundle = build_rag_messages(
             template,
             self.name,
@@ -230,8 +254,8 @@ class RagBackend:
             examples,
             request.history,
             request.text,
-            facts=request.facts,
-            dossier=self.dossier,
+            facts=facts,
+            dossier=self.dossier if dossier is None else dossier,
             statements=statements,
         )
         return generate_validated(

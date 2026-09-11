@@ -28,6 +28,16 @@ class LLMError(RuntimeError):
     """The endpoint failed after the bounded retries, or returned no text."""
 
 
+# A provider's content filter refusing the text (DashScope answers 400 DataInspectionFailed
+# on swearing, sex or politics). Deterministic for that text, unlike a timeout or a quota.
+REFUSAL_MARKERS = ("datainspectionfailed", "inappropriate content", "content_filter")
+
+
+def is_content_refusal(error: object) -> bool:
+    text = str(error).lower()
+    return any(marker in text for marker in REFUSAL_MARKERS)
+
+
 @dataclass(frozen=True)
 class LLMResult:
     text: str

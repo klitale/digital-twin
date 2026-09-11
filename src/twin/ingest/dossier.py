@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from twin.core.llm_client import LLMClient, LLMError, LLMResult
+from twin.core.llm_client import LLMClient, LLMError, LLMResult, is_content_refusal
 from twin.core.prompts import PromptTemplate
 from twin.core.schemas import Pair
 from twin.ingest.style_profile import read_style_profile
@@ -39,14 +39,6 @@ MAX_CONTEXT_CHARS = 200
 MAX_FACTS = 30
 _FACT_RE = re.compile(r"^\s*-\s+\S")
 ChunkNotes = list[tuple[list[Pair], LLMResult]]
-# A provider's content filter refusing the text (DashScope answers 400 DataInspectionFailed
-# on swearing or politics). Only these are split and retried; a quota error is not.
-REFUSAL_MARKERS = ("datainspectionfailed", "inappropriate content", "content_filter")
-
-
-def is_refusal(error: Exception) -> bool:
-    text = str(error).lower()
-    return any(marker in text for marker in REFUSAL_MARKERS)
 
 
 class DossierExistsError(FileExistsError):
@@ -138,7 +130,7 @@ def generate_dossier(
         try:
             return [(chunk, call(chunk))], 0
         except LLMError as exc:
-            if not is_refusal(exc):
+            if not is_content_refusal(exc):  # only refusals are split; a quota error is not
                 raise
             if len(chunk) <= min_split:
                 log.warning("dossier.refused", pairs=len(chunk), period=chunk[0].period)
