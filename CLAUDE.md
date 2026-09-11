@@ -29,6 +29,7 @@ interface, one evaluation harness with a blind judge. Public portfolio repo: no 
 | 10 | Initiative: follow-ups and openers as opt-in features, command menu | done |
 | 11 | Learning: fact sheets from live chats (`/learn`), never from bot output | done |
 | 12 | Guard: provocations answered in one line, output caps, per-chat reply budget | done |
+| 13 | Knowledge: self dossier, duel judge; prod rag_v7 (3.21 vs 3.34, duel 15:14) | done |
 
 ## Stack and layout
 Python 3.11, `uv`, `ruff`, `pytest`, `typer`, `pydantic-settings`, `structlog`, `aiogram` 3
@@ -50,8 +51,7 @@ deploy/    inventory.sh, push.sh (rsync + install), install.sh <role>, sync_inde
            split.py (time tail + seeded eval sample, leakage asserts), profile_dataset.py,
            dataconfig.py (configs/data/*.yaml), pipeline.py (twin ingest), stats.py (5.4),
            style_profile.py (twin style-profile: 300 train replies + stats -> Russian rules)
-scripts/privacy_check.py  tests/ (synthetic fixtures, fake_openai_server.py)
-prompts/<name>_v<N>.md  configs/data/default.yaml (min_date 2021, 15% tail)  training/ serving/
+prompts/<name>_v<N>.md  configs/data/default.yaml (2021+, 15% tail)  scripts/ tests/ training/ serving/
 ```
 
 ## Conventions
@@ -79,7 +79,7 @@ prompts/<name>_v<N>.md  configs/data/default.yaml (min_date 2021, 15% tail)  tra
 bot = srv-b (`/opt/twin`, systemd `twin`, RSS ~230 MB, starts with `DRY_RUN` from `.env`),
 jobs = srv-c (`~/twin`, no sudo, CLI only), staging = srv-a installed but **disabled**: one
 token = one polling instance, one Business account = one chatbot, so staging needs its own
-bot and account. Deploy path today `deploy/push.sh` (rsync); `git pull` once on GitHub.
+bot and account. Deploy `deploy/push.sh` (rsync); `deploy/control.sh <host> control|poke`.
 
 ## Telegram identities (three different accounts here)
 `TWIN_SENDER_ID` = whose export messages are the replies; `BUSINESS_OWNER_ID` = account the

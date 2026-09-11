@@ -106,6 +106,59 @@ The judge compares against a single reference reply, which caps `style` for ever
 most replies in this chat are one-line reactions that no model can predict exactly.
 `data/eval/report.html` has every reply next to its reference and the judge's reasons.
 
+## Knowledge: a twin that knows its own life (Phase 13)
+
+Style is not enough: asked "how's the project?", the twin could only shrug, because
+nothing in the prompt said what the person does, whom a first name means or what he
+thinks. Three pieces were built and measured on the same 80 holdout pairs:
+
+- `twin dossier` distils a self dossier (at most 30 lines, gitignored, hand-editable)
+  from the 3956 training replies of at least 20 characters: per-chunk notes by
+  `gpt-5.4-mini`, merged by Claude Sonnet. DashScope's content filter refused a chunk
+  of this chat outright, so a refused chunk is halved and what still fails is counted.
+- `twin index --statements` embeds his own reply texts, to answer "what has he said
+  about this?".
+- `twin duel A B`, a blind pairwise judge that asks which of two replies is the more
+  alive message to a friend while still plausibly his, in both orders (a win counts only
+  if it survives the swap), with a sign test. The reference-based judge cannot see that
+  a reply is interesting; this one can.
+
+| prompt | what it adds | overall | duel vs rag_v2 (wins : losses, ties) |
+|---|---|---|---|
+| rag_v2 | production baseline | 3.338 | |
+| rag_v4 | dossier + his past statements | 3.159 | 19 : 9, 52 ties, p = 0.09 |
+| rag_v5 | rag_v4 + a hidden "intent" line before the reply | 3.228 | |
+| rag_v6 | dossier as background, used only when asked | 3.290 | |
+| rag_v7 | rag_v6 + favourite topics he may raise himself | 3.212 | 15 : 14, 51 ties, p = 1.0 |
+| rag_v8 | rag_v7 + the intent line | 3.206 | |
+
+What this says:
+
+- **Knowledge buys liveliness and costs likeness.** rag_v4 was the livelier twin (19:9)
+  and the least similar one: replies grew from a median of 39 to 53 characters and the
+  dossier was dragged in where it did not belong. Restraint (rag_v6) recovered the score
+  and, with it, the blandness.
+- **His past statements do not retrieve by topic.** Embeddings of short chat lines match
+  register, not subject: the nearest "statements" to "купишь???" were five kinds of
+  laughter. `STATEMENTS_K=0` switches the collection off; production runs without it.
+- **The intent line is not worth it**: +0.07 over rag_v4, nothing over rag_v7, 0.5 s slower.
+- **A dossier in the prompt trips content filters.** DashScope refused one prompt in
+  four of the five knowledge runs (swearing plus politics plus the dossier's details),
+  where rag_v2 answered. A refused knowledge prompt is now retried once without the
+  knowledge section and marked `content_refusal`, so it answers instead of going silent.
+
+Production runs rag_v7 (`RAG_PROMPT=rag_v7`, `STATEMENTS_K=0`) because the owner wants
+the favourite topics: it knows his life and now and then brings up the people he cares
+about (3 of 80 holdout replies; one of them almost word for word what he really wrote).
+It is not a measured improvement: 0.13 below rag_v2 overall, of which one silence is
+already fixed, and level on liveliness. The dossier holds facts learned from one chat,
+while the bot answers up to three partners; what stays in it is the owner's decision.
+
+`twin control <command>` and `twin poke <user_id> [opener]` do what the Telegram
+commands do, without Telegram; `deploy/control.sh <host> control on` or `... poke <id>`
+runs them on the host with the service stopped, so the running bot cannot overwrite
+the state, and starts it again.
+
 ## Telegram safety
 
 The bot fails closed: it replies only through a verified business connection whose
