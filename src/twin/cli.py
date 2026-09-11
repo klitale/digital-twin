@@ -394,6 +394,82 @@ def run(
 
 
 @app.command()
+def control(
+    command: Annotated[
+        list[str], typer.Argument(help="A control command as in Telegram: `on`, `learn on`...")
+    ],
+) -> None:
+    """Apply one control command to the persisted bot state (run while the bot is stopped,
+    or the running bot overwrites it: deploy/control.sh does that)."""
+    import time
+
+    from twin.bot.control import ControlContext, handle_control, parse_command
+    from twin.bot.state import StateStore
+    from twin.config import load_settings
+    from twin.core.factory import build_memory
+
+    settings = load_settings()
+    text = "/twin " + " ".join(command)
+    parsed = parse_command(text)
+    if parsed is None or parsed[0] in ("poke", "facts", "forget"):
+        typer.echo("error: use `twin poke` to send; facts/forget need the Telegram bot", err=True)
+        raise typer.Exit(code=2)
+    store = StateStore(settings.state_dir)
+    state = store.load_state()
+    context = ControlContext(
+        state=state,
+        memory=build_memory(settings),
+        connection=store.load_connection(),
+        settings_mode=settings.twin_mode,
+        settings_dry_run=settings.dry_run,
+        allowed_user_ids=settings.allowed_user_ids,
+        now=int(time.time()),
+    )
+    reply = handle_control(text, context)
+    store.save_state(state)
+    typer.echo(reply)
+
+
+@app.command()
+def poke(
+    user_id: Annotated[int, typer.Argument(help="An ALLOWED_USER_IDS partner.")],
+    kind: Annotated[str, typer.Argument(help="opener | followup")] = "opener",
+) -> None:
+    """Send one initiative message now, through every gate (connection, allowlist, enabled,
+    pause, validation, dry-run). Run while the bot is stopped: deploy/control.sh does that."""
+    import asyncio
+
+    from aiogram import Bot
+    from aiogram.client.default import DefaultBotProperties
+
+    from twin.bot.app import build_twin_bot
+    from twin.bot.initiative import FEATURES
+    from twin.config import ConfigError, load_settings
+
+    settings = load_settings()
+    if kind not in FEATURES:
+        typer.echo(f"error: kind must be one of {', '.join(FEATURES)}", err=True)
+        raise typer.Exit(code=2)
+    try:
+        settings.require_bot()
+    except ConfigError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    async def send() -> str:
+        bot = Bot(
+            token=settings.tg_bot_token.get_secret_value(),  # type: ignore[union-attr]
+            default=DefaultBotProperties(parse_mode=None),
+        )
+        try:
+            return await build_twin_bot(bot, settings, cli_dry_run=False).poke(user_id, kind)
+        finally:
+            await bot.session.close()
+
+    typer.echo(f"poke {kind} {user_id} -> {asyncio.run(send())}")
+
+
+@app.command()
 def train(
     config: Annotated[Path, typer.Option("--config")] = Path("configs/train/full.yaml"),
     dry_run: Annotated[

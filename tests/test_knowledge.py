@@ -77,6 +77,16 @@ def test_statements_collection_is_separate_and_embeds_replies(tmp_path: Path) ->
     )
 
 
+def test_statements_retriever_is_optional(tmp_path: Path) -> None:
+    from twin.config import Settings
+    from twin.core.factory import build_statements_retriever
+
+    settings = Settings(_env_file=None, data_dir=tmp_path, statements_k=0)  # type: ignore[call-arg]
+    assert build_statements_retriever(settings, HashEmbeddings()) is None  # switched off
+    settings = Settings(_env_file=None, data_dir=tmp_path, statements_k=4)  # type: ignore[call-arg]
+    assert build_statements_retriever(settings, HashEmbeddings()) is None  # not built yet
+
+
 # --- prompt ----------------------------------------------------------------------------------
 
 

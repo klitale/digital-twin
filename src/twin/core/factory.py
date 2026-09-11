@@ -57,7 +57,10 @@ def build_retriever(
 def build_statements_retriever(
     settings: Settings, embeddings: EmbeddingProvider | None = None
 ) -> Retriever | None:
-    """His past statements (rag_v4+); ``None`` until `twin index --statements` has run."""
+    """His past statements (rag_v4+); ``None`` when ``STATEMENTS_K=0`` or until
+    `twin index --statements` has run."""
+    if settings.statements_k <= 0:
+        return None
     store = ChromaVectorStore(settings.chroma_dir, STATEMENTS_COLLECTION, STATEMENTS_MANIFEST)
     if store.read_manifest() is None:
         log.warning("statements.missing", hint="run `twin index --statements`")
