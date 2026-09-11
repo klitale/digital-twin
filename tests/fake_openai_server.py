@@ -33,9 +33,11 @@ class FakeOpenAIServer:
         fail_status: int = 500,
         embedding_dim: int = 8,
         finish_reason: str = "stop",
+        fail_message: str = "boom",
     ) -> None:
         self.reply = reply
         self.finish_reason = finish_reason
+        self.fail_message = fail_message
         self.fail_times = fail_times
         self.fail_status = fail_status
         self.embedding_dim = embedding_dim
@@ -59,7 +61,8 @@ class FakeOpenAIServer:
                         outer.fail_times -= 1
                 if must_fail:
                     self._send(
-                        outer.fail_status, {"error": {"message": "boom", "type": "server_error"}}
+                        outer.fail_status,
+                        {"error": {"message": outer.fail_message, "type": "server_error"}},
                     )
                     return
                 if self.path.endswith("/chat/completions"):

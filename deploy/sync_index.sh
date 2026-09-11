@@ -33,6 +33,9 @@ echo "[sync] index + style profile -> $NAME:$DIR/data"
 "${SSH[@]}" "$TARGET" "mkdir -p $DIR/data/chroma $DIR/data/processed"
 rsync -az --delete -e "$RSYNC_SSH" "$HERE/data/chroma/" "$TARGET:$DIR/data/chroma/"
 rsync -az -e "$RSYNC_SSH" "$HERE/data/processed/style_profile.md" "$HERE/data/processed/dataset_manifest.json" "$TARGET:$DIR/data/processed/"
+if [ -f "$HERE/data/processed/self_dossier.md" ]; then
+  rsync -az -e "$RSYNC_SSH" "$HERE/data/processed/self_dossier.md" "$TARGET:$DIR/data/processed/"
+fi
 if [ "$PROCESSED" = 1 ]; then
   echo "[sync] pairs + holdout -> $NAME"
   rsync -az -e "$RSYNC_SSH" "$HERE/data/processed/pairs.jsonl" "$HERE/data/processed/holdout.jsonl" "$TARGET:$DIR/data/processed/"

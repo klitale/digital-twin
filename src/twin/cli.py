@@ -181,33 +181,130 @@ def style_profile(
 
 
 @app.command()
+def dossier(
+    force: Annotated[
+        bool, typer.Option("--force", help="Overwrite an existing, possibly hand-edited dossier.")
+    ] = False,
+    chunk_size: Annotated[int, typer.Option("--chunk-size", min=1)] = 400,
+    min_chars: Annotated[int, typer.Option("--min-chars", min=1)] = 20,
+    map_model: Annotated[
+        str | None, typer.Option("--map-model", help="Model for the per-chunk notes.")
+    ] = None,
+) -> None:
+    """Distil the self dossier (what the twin knows about himself) from training replies."""
+    from twin.config import ConfigError, load_settings
+    from twin.core.llm_client import LLMClient, LLMError
+    from twin.core.prompts import PromptError, load_prompt
+    from twin.ingest.dossier import (
+        DOSSIER_MAP_PROMPT,
+        DOSSIER_REDUCE_PROMPT,
+        DossierExistsError,
+        generate_dossier,
+        write_dossier,
+    )
+    from twin.ingest.pipeline import SELF_DOSSIER_FILE, load_processed
+
+    settings = load_settings()
+    target = settings.processed_dir / SELF_DOSSIER_FILE
+    try:
+        if target.exists() and not force:
+            raise DossierExistsError(
+                f"{target} exists (possibly hand-edited); rerun with --force to overwrite"
+            )
+        settings.require_llm()
+        if not settings.twin_name.strip():
+            raise ConfigError("TWIN_NAME is not set: the dossier needs the persona's name")
+        train, _holdout, manifest = load_processed(settings)
+
+        def client(model: str) -> LLMClient:
+            return LLMClient(
+                base_url=settings.llm_base_url,
+                api_key=settings.llm_api_key,  # type: ignore[arg-type]
+                model=model,
+            )
+
+        result = generate_dossier(
+            client(map_model or settings.llm_model),
+            client(settings.style_profile_model),
+            load_prompt(DOSSIER_MAP_PROMPT),
+            load_prompt(DOSSIER_REDUCE_PROMPT),
+            settings.twin_name,
+            train,
+            chunk_size=chunk_size,
+            min_chars=min_chars,
+            workers=settings.embed_workers,
+        )
+        write_dossier(target, result, manifest.dataset_version, force=force)
+    except (ConfigError, PromptError, LLMError, DossierExistsError, OSError, ValueError) as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"dossier: {target}")
+    typer.echo(
+        f"{result.facts} facts from {result.pairs_used} replies in {result.chunks} chunks "
+        f"({result.skipped_pairs} refused by the content filter); "
+        f"map {result.map_model}, reduce {result.reduce_model}; "
+        f"tokens {result.prompt_tokens}+{result.completion_tokens}"
+    )
+
+
+@app.command()
 def index(
     rebuild: Annotated[
         bool, typer.Option("--rebuild", help="Drop the existing index and build it again.")
+    ] = False,
+    statements: Annotated[
+        bool,
+        typer.Option(
+            "--statements", help="Build the statements collection (his reply texts) instead."
+        ),
     ] = False,
 ) -> None:
     """Build the retrieval index from the training pairs (holdout is never indexed)."""
     from twin.config import ConfigError, load_settings
     from twin.core.embeddings import EmbeddingError, embeddings_from_settings
-    from twin.core.vector_store import ChromaVectorStore
-    from twin.ingest.index import IndexExistsError, build_index
+    from twin.core.vector_store import (
+        STATEMENTS_COLLECTION,
+        STATEMENTS_MANIFEST,
+        ChromaVectorStore,
+    )
+    from twin.ingest.index import (
+        STATEMENTS_RULE,
+        IndexExistsError,
+        build_index,
+        reply_text_for_index,
+        statement_pairs,
+    )
     from twin.ingest.pipeline import load_processed
 
     settings = load_settings()
     try:
         train, _holdout, manifest = load_processed(settings)
-        store = ChromaVectorStore(settings.chroma_dir)
+        if statements:
+            store = ChromaVectorStore(
+                settings.chroma_dir, STATEMENTS_COLLECTION, STATEMENTS_MANIFEST
+            )
+            pairs, extra = (
+                statement_pairs(train),
+                {
+                    "text_for": reply_text_for_index,
+                    "rule": STATEMENTS_RULE,
+                },
+            )
+        else:
+            store = ChromaVectorStore(settings.chroma_dir)
+            pairs, extra = train, {}
         if rebuild and store.count() > 0:
             typer.echo(f"dropping {store.count()} indexed records")
             store.reset()
         index_manifest = build_index(
             store,
             embeddings_from_settings(settings),
-            train,
+            pairs,
             manifest.dataset_version,
             batch_size=settings.embed_batch_size,
             progress=True,
             workers=settings.embed_workers,
+            **extra,  # type: ignore[arg-type]
         )
     except (ConfigError, EmbeddingError, IndexExistsError, OSError, ValueError) as exc:
         typer.echo(f"error: {exc}", err=True)
@@ -441,7 +538,14 @@ def eval_(
 ) -> None:
     """Generate and judge every holdout pair for one mode; writes data/eval/<run>.json."""
     from twin.config import ConfigError, load_settings
-    from twin.core.factory import build_backend, build_retriever, style_profile_digest
+    from twin.core.embeddings import QueryCache, embeddings_from_settings
+    from twin.core.factory import (
+        build_backend,
+        build_retriever,
+        build_statements_retriever,
+        dossier_digest,
+        style_profile_digest,
+    )
     from twin.core.llm_client import LLMClient, LLMError
     from twin.core.prompts import PromptError, load_prompt
     from twin.core.vector_store import IndexMismatchError
@@ -464,7 +568,12 @@ def eval_(
         if not settings.twin_name.strip():
             raise ConfigError("TWIN_NAME is not set")
         _train, holdout, manifest = load_processed(settings)
-        retriever = AuditingRetriever(build_retriever(settings, eval_config.generation.k))
+        embeddings = QueryCache(embeddings_from_settings(settings))
+        retriever = AuditingRetriever(
+            build_retriever(settings, eval_config.generation.k, embeddings)
+        )
+        inner_statements = build_statements_retriever(settings, embeddings)
+        statements = AuditingRetriever(inner_statements) if inner_statements else None
         gateway = None
         if mode is Mode.RAG:
             settings.require_llm()
@@ -474,7 +583,13 @@ def eval_(
                 model=settings.llm_model,
                 temperature=eval_config.generation.temperature,
             )
-        backend = build_backend(settings, mode, retriever=retriever, llm=gateway)  # type: ignore[arg-type]
+        backend = build_backend(
+            settings,
+            mode,
+            retriever=retriever,  # type: ignore[arg-type]
+            llm=gateway,
+            statements_retriever=statements,  # type: ignore[arg-type]
+        )
         judge = Judge(
             LLMClient(
                 base_url=settings.judge_base_url,
@@ -503,6 +618,8 @@ def eval_(
             manifest.messages_dataset_version,
             style_profile_sha256=style_profile_digest(settings),
             progress=progress,
+            statements_retriever=statements,
+            dossier_sha256=dossier_digest(settings),
         )
         typer.echo("", err=True)
         path = write_run(run, settings.data_dir / "eval")
@@ -543,6 +660,54 @@ def compare(
     text = render_markdown(compare_runs([read_run(p) for p in paths], baseline))
     (settings.data_dir / "eval" / "compare.md").write_text(text, encoding="utf-8")
     typer.echo(text)
+
+
+@app.command()
+def duel(
+    run_a: Annotated[str, typer.Argument(help="Run file, or a unique run-id prefix (A).")],
+    run_b: Annotated[str, typer.Argument(help="Run file, or a unique run-id prefix (B).")],
+    limit: Annotated[int | None, typer.Option("--limit", help="Judge only N pairs.")] = None,
+) -> None:
+    """Blind pairwise judge: which run replies more alive, still in character."""
+    from twin.config import ConfigError, load_settings
+    from twin.core.llm_client import LLMClient
+    from twin.core.prompts import PromptError, load_prompt
+    from twin.eval.duel import DUEL_PROMPT, DuelJudge, resolve_run, run_duel, write_duel
+    from twin.eval.harness import read_run
+
+    settings = load_settings()
+    directory = settings.data_dir / "eval"
+    try:
+        settings.require_judge()
+        first = read_run(resolve_run(directory, run_a))
+        second = read_run(resolve_run(directory, run_b))
+        judge = DuelJudge(
+            LLMClient(
+                base_url=settings.judge_base_url,
+                api_key=settings.judge_api_key_effective,  # type: ignore[arg-type]
+                model=settings.judge_model,
+                temperature=0.0,
+            ),
+            load_prompt(DUEL_PROMPT),
+            settings.twin_name or "Он",
+        )
+
+        def progress(done: int, total: int) -> None:
+            typer.echo(f"\r{done}/{total}", nl=False, err=True)
+
+        result = run_duel(first, second, judge, limit=limit, progress=progress)
+        typer.echo("", err=True)
+        path = write_duel(result, directory / "duels")
+    except (ConfigError, PromptError, OSError, ValueError) as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    s = result.summary
+    typer.echo(f"duel: {path}")
+    typer.echo(
+        f"A {result.run_a} ({result.prompt_a}) vs B {result.run_b} ({result.prompt_b}): "
+        f"n={s.n}, A wins {s.a_wins}, B wins {s.b_wins}, ties {s.ties}, errors {s.errors}, "
+        f"sign test p={s.p_value}"
+    )
 
 
 @app.command()

@@ -93,6 +93,8 @@ class Settings(BaseSettings):
     llm_base_url: str = "https://api.timeweb.ai/v1"
     llm_api_key: SecretStr | None = None
     llm_model: str = "dashscope/qwen3.5-flash"
+    # prompts/<name>.md for rag mode; rag_v4+ add the self dossier and his past statements
+    rag_prompt: str = "rag_v2"
 
     # Fine-tuned model endpoint (Modal, OpenAI-compatible)
     ft_base_url: str | None = None
@@ -123,6 +125,7 @@ class Settings(BaseSettings):
     embed_batch_size: int = 10  # the gateway rejects larger embedding batches (503)
     embed_workers: int = 4
     retrieval_k: int = 8
+    statements_k: int = 4  # his past statements shown by a knowledge prompt (rag_v4+)
     history_turns: int = 10
     generation_temperature: float = 0.8
 

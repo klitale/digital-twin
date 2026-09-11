@@ -22,9 +22,10 @@ from twin.core.prompt import (
     build_rag_messages,
     format_examples,
     format_history,
+    uses_knowledge,
 )
 from twin.core.prompts import PromptTemplate
-from twin.core.retriever import Retriever
+from twin.core.retriever import RetrievedExample, Retriever
 from twin.core.validate import DEFAULT_ASSISTANT_MARKERS, validate_reply
 from twin.logsetup import get_logger
 
@@ -62,6 +63,8 @@ class GenerationResult(BaseModel):
     raw_texts: list[str] = Field(description="every raw completion, for eval records")
     error: str | None = Field(default=None, description="endpoint failure, if any")
     fallback_from: str | None = Field(default=None, description="mode that failed first")
+    statement_ids: list[str] = Field(default_factory=list, description="his statements shown")
+    plan: str | None = Field(default=None, description="one-line intent, when the prompt asks")
 
 
 class GenerationBackend(Protocol):
@@ -88,6 +91,7 @@ def generate_validated(
     markers: Sequence[str],
     retrieved_ids: list[str],
     request: GenerationRequest,
+    statement_ids: list[str] | None = None,
 ) -> GenerationResult:
     """Call the model, validate, regenerate once, then stay silent.
 
@@ -99,6 +103,7 @@ def generate_validated(
     rejected: list[str] = []
     raw_texts: list[str] = []
     text: str | None = None
+    plan: str | None = None
     error: str | None = None
     model = llm.model
     attempts = 0
@@ -126,7 +131,7 @@ def generate_validated(
             break
         verdict = validate_reply(result.text, max_reply_chars, markers, name)
         if verdict.ok:
-            text = verdict.text
+            text, plan = verdict.text, verdict.plan
             break
         rejected.append(verdict.reason or "invalid")
     latency_ms = int((time.perf_counter() - started) * 1000)
@@ -144,6 +149,8 @@ def generate_validated(
         model=model,
         prompt_version=version,
         guard=request.guard,
+        statement_ids=statement_ids or [],
+        plan=plan,
         retrieved_example_ids=retrieved_ids,
         params=params,
         latency_ms=latency_ms,
@@ -159,6 +166,8 @@ def generate_validated(
         model=model,
         prompt_version=version,
         retrieved_ids=retrieved_ids,
+        statement_ids=statement_ids or [],
+        plan=plan,
         params=params,
         latency_ms=latency_ms,
         attempts=attempts,
@@ -182,11 +191,15 @@ class RagBackend:
         max_reply_chars: int = 600,
         markers: Sequence[str] = DEFAULT_ASSISTANT_MARKERS,
         facts_template: PromptTemplate | None = None,
+        statements_retriever: Retriever | None = None,
+        dossier: str = "",
     ) -> None:
         self.llm = llm
         self.retriever = retriever
         self.template = template
         self.facts_template = facts_template
+        self.statements_retriever = statements_retriever
+        self.dossier = dossier
         self.name = name
         self.style_profile = style_profile
         self.temperature = temperature
@@ -200,10 +213,16 @@ class RagBackend:
             ts_before=request.ts_before,
             exclude_pair_ids=request.exclude_pair_ids,
         )
-        # A fact sheet is worth a prompt section only when it has something in it: an
-        # empty section measurably cost 0.08 overall on the holdout.
-        facts = request.facts.strip()
-        template = self.facts_template if facts and self.facts_template else self.template
+        statements: list[RetrievedExample] = []
+        if uses_knowledge(self.template):
+            # rag_v4+ render every knowledge section (facts included) only when non-empty
+            template = self.template
+            statements = self._statements(request, {e.pair_id for e in examples})
+        else:
+            # A fact sheet is worth a prompt section only when it has something in it: an
+            # empty section measurably cost 0.08 overall on the holdout.
+            facts = request.facts.strip()
+            template = self.facts_template if facts and self.facts_template else self.template
         bundle = build_rag_messages(
             template,
             self.name,
@@ -212,6 +231,8 @@ class RagBackend:
             request.history,
             request.text,
             facts=request.facts,
+            dossier=self.dossier,
+            statements=statements,
         )
         return generate_validated(
             self.llm,
@@ -223,7 +244,21 @@ class RagBackend:
             markers=self.markers,
             retrieved_ids=[e.pair_id for e in examples],
             request=request,
+            statement_ids=[s.pair_id for s in statements],
         )
+
+    def _statements(self, request: GenerationRequest, shown: set[str]) -> list[RetrievedExample]:
+        """His past words on the topic, under the same time bound and exclusions as the
+        examples, minus the pairs the examples already show."""
+        if self.statements_retriever is None:
+            return []
+        hits = self.statements_retriever.retrieve(
+            request.text,
+            previous_partner_text=request.previous_partner_text,
+            ts_before=request.ts_before,
+            exclude_pair_ids=request.exclude_pair_ids,
+        )
+        return [hit for hit in hits if hit.pair_id not in shown]
 
 
 class InitiativeBackend:

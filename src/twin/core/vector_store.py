@@ -20,6 +20,9 @@ from twin.core.embeddings import EmbeddingIdentity
 
 MANIFEST_FILE = "index_manifest.json"
 COLLECTION = "pairs"
+# his replies embedded by their own text: what he said about a topic (rag_v4+)
+STATEMENTS_COLLECTION = "statements"
+STATEMENTS_MANIFEST = "statements_manifest.json"
 Metadata = Mapping[str, str | int | float | bool]
 
 
@@ -104,22 +107,26 @@ def new_manifest(
 
 
 class ChromaVectorStore:
-    def __init__(self, directory: Path) -> None:
+    def __init__(
+        self, directory: Path, collection: str = COLLECTION, manifest_file: str = MANIFEST_FILE
+    ) -> None:
         import chromadb
 
         self.directory = directory
+        self.collection_name = collection
+        self.manifest_file = manifest_file
         directory.mkdir(parents=True, exist_ok=True)
         self._client = chromadb.PersistentClient(
             path=str(directory),
             settings=chromadb.config.Settings(anonymized_telemetry=False, allow_reset=True),
         )
         self._collection = self._client.get_or_create_collection(
-            COLLECTION, metadata={"hnsw:space": "cosine"}, embedding_function=None
+            collection, metadata={"hnsw:space": "cosine"}, embedding_function=None
         )
 
     @property
     def manifest_path(self) -> Path:
-        return self.directory / MANIFEST_FILE
+        return self.directory / self.manifest_file
 
     def add(
         self,
@@ -166,9 +173,9 @@ class ChromaVectorStore:
         return self._collection.count()
 
     def reset(self) -> None:
-        self._client.delete_collection(COLLECTION)
+        self._client.delete_collection(self.collection_name)
         self._collection = self._client.get_or_create_collection(
-            COLLECTION, metadata={"hnsw:space": "cosine"}, embedding_function=None
+            self.collection_name, metadata={"hnsw:space": "cosine"}, embedding_function=None
         )
         if self.manifest_path.exists():
             self.manifest_path.unlink()

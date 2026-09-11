@@ -48,6 +48,9 @@ class EvalRecord(BaseModel):
     params: dict[str, Any]
     latency_ms: int
     retrieved: list[RetrievedRecord]
+    statements: list[RetrievedRecord] = Field(
+        default_factory=list, description="his past statements shown (rag_v4+)"
+    )
     judge: JudgeScores | None
 
 
@@ -70,6 +73,9 @@ class RunMetadata(BaseModel):
         default=None,
         description="identity of the style profile, which is part of the prompt but is "
         "gitignored personal data; None for runs recorded before it was tracked",
+    )
+    dossier_sha256: str | None = Field(
+        default=None, description="identity of the self dossier (rag_v4+); gitignored"
     )
     n: int
 

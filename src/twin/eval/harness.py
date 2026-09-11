@@ -113,6 +113,16 @@ def assert_no_leakage(
             )
 
 
+def retrieved_record(example: RetrievedExample) -> RetrievedRecord:
+    return RetrievedRecord(
+        pair_id=example.pair_id,
+        ts=example.ts,
+        last_partner_text=example.last_partner_text,
+        reply=example.reply,
+        distance=example.distance,
+    )
+
+
 def git_commit() -> str | None:
     try:
         return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], text=True).strip()
@@ -163,6 +173,8 @@ def run_eval(
     messages_dataset_version: str,
     style_profile_sha256: str | None = None,
     progress: Callable[[int, int], None] | None = None,
+    statements_retriever: AuditingRetriever | None = None,
+    dossier_sha256: str | None = None,
 ) -> EvalRun:
     started = datetime.now(tz=UTC)
     sample = [p for p in pairs if p.eval_sample]
@@ -182,9 +194,14 @@ def run_eval(
             ts_before=pair.ts,
             exclude_pair_ids=[pair.pair_id],
         )
+        for auditor in (retriever, statements_retriever):
+            if auditor is not None:
+                auditor.last = []
         result = backend.generate(request)
         retrieved = retriever.last if retriever else []
         assert_no_leakage(pair, retrieved, holdout_ids)
+        statements = statements_retriever.last if statements_retriever else []
+        assert_no_leakage(pair, statements, holdout_ids)
         verdict = judge.judge(pair.context, pair.reply, result.text)
         records.append(
             EvalRecord(
@@ -205,16 +222,8 @@ def run_eval(
                 prompt_version=result.prompt_version,
                 params=result.params,
                 latency_ms=result.latency_ms,
-                retrieved=[
-                    RetrievedRecord(
-                        pair_id=e.pair_id,
-                        ts=e.ts,
-                        last_partner_text=e.last_partner_text,
-                        reply=e.reply,
-                        distance=e.distance,
-                    )
-                    for e in retrieved
-                ],
+                retrieved=[retrieved_record(e) for e in retrieved],
+                statements=[retrieved_record(e) for e in statements],
                 judge=verdict,
             )
         )
@@ -235,6 +244,7 @@ def run_eval(
         model="+".join(sorted(models)),
         prompt_version="+".join(sorted(prompt_versions)),
         style_profile_sha256=style_profile_sha256,
+        dossier_sha256=dossier_sha256,
         judge_model=judge.llm.model,
         judge_prompt_version=judge.prompt_version,
         eval_config=config.model_dump(),

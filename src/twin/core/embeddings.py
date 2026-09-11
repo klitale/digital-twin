@@ -8,6 +8,7 @@ identity (``provider``, ``model``, ``dimension``) that the index manifest record
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
@@ -131,6 +132,31 @@ class LocalE5Embeddings:
         if vectors and self._dimension is None:
             self._dimension = len(vectors[0])
         return vectors
+
+
+class QueryCache:
+    """Remembers the last query vectors, so the examples and the statements retrievers
+    embed one incoming message once instead of twice."""
+
+    def __init__(self, inner: EmbeddingProvider) -> None:
+        self.inner = inner
+        self._lock = threading.Lock()
+        self._key: tuple[str, ...] | None = None
+        self._vectors: list[list[float]] = []
+
+    @property
+    def identity(self) -> EmbeddingIdentity:
+        return self.inner.identity
+
+    def embed(self, texts: Sequence[str], kind: TextKind) -> list[list[float]]:
+        if kind != "query":
+            return self.inner.embed(texts, kind)
+        key = tuple(texts)
+        with self._lock:
+            if key != self._key:
+                self._vectors = self.inner.embed(texts, kind)
+                self._key = key
+            return [list(vector) for vector in self._vectors]
 
 
 def embeddings_from_settings(settings: Settings) -> EmbeddingProvider:
